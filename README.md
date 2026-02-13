@@ -90,6 +90,24 @@ This is a free community service. Donations help cover API and infrastructure co
 | KV Namespace | `DIRECT_IMG_CACHE` | Query → cache existence + timestamp |
 | KV Namespace | `DIRECT_IMG_RATE` | Per-IP daily new-search counter |
 
+### Pages Bindings
+
+Set in **Settings → Functions → Bindings**:
+
+| Type | Variable name | Resource |
+|---|---|---|
+| R2 Bucket | `R2_IMAGES` | `direct-img-store` |
+| KV Namespace | `DIRECT_IMG_CACHE` | `DIRECT_IMG_CACHE` |
+| KV Namespace | `DIRECT_IMG_RATE` | `DIRECT_IMG_RATE` |
+
+### Environment Variables / Secrets
+
+Set in **Settings → Environment variables**:
+
+| Type | Variable | Description |
+|---|---|---|
+| Secret | `BING_API_KEY` | Bing Image Search API subscription key |
+
 ### R2: `direct-img-store`
 
 Key is derived deterministically from the query — no need to store it in KV.
@@ -157,12 +175,6 @@ Set manually in **Security → WAF → Rate limiting rules**:
    - Rate: 10 requests per 10 seconds
    - Per: IP
    - Action: Managed Challenge
-
-### Environment Variables / Secrets
-
-| Variable | Description |
-|---|---|
-| `BING_API_KEY` | Bing Image Search API subscription key |
 
 ---
 
