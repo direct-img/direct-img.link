@@ -87,8 +87,8 @@ This is a free community service. Donations help cover API and infrastructure co
 | Resource | Name | Purpose |
 |---|---|---|
 | R2 Bucket | `direct-img-store` | Stores compressed WebP images |
-| KV Namespace | `SEARCH_CACHE` | Query → cache existence + timestamp |
-| KV Namespace | `RATE_LIMIT` | Per-IP daily new-search counter |
+| KV Namespace | `DIRECT_IMG_CACHE` | Query → cache existence + timestamp |
+| KV Namespace | `DIRECT_IMG_RATE` | Per-IP daily new-search counter |
 
 ### R2: `direct-img-store`
 
@@ -100,7 +100,7 @@ Example: `"orange cat"` → `a1b2c3d4...ef.webp`
 
 All images stored as compressed WebP.
 
-### KV: `SEARCH_CACHE`
+### KV: `DIRECT_IMG_CACHE`
 
 Confirms a cached image exists for a query. The R2 key is derived from the same query at request time.
 
@@ -122,7 +122,7 @@ orange cat
 
 **Size:** ~20 bytes per entry. Free tier (1 GB) supports millions of entries.
 
-### KV: `RATE_LIMIT`
+### KV: `DIRECT_IMG_RATE`
 
 Tracks daily new-search count per IP.
 
