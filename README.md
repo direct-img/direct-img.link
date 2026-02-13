@@ -18,7 +18,7 @@ That's it. The image is searched, cached, and served.
 
 1. A request hits `direct-img.link/<query>`
 2. If cached (within 30 days) → serves the image instantly from edge
-3. If not cached → searches via Google Custom Search API → compresses to WebP → caches in R2 → serves
+3. If not cached → searches via Brave Image Search API → compresses to WebP → caches in R2 → serves
 
 ## URL Format
 
@@ -57,7 +57,7 @@ as the image URL. Use + to separate words. Example: ![orange cat](https://direct
 
 - **10 new searches per day per IP** (resets at midnight UTC)
 - **Cache hits are unlimited** (within WAF limits above)
-- **Google API quota:** 100 free queries/day, then $5/1k
+- **Brave API quota:** Free plan includes 2,000 queries/month
 
 ## Caching
 
@@ -74,22 +74,16 @@ Free community service. Donations help cover API and infrastructure costs.
 
 ## Self-Hosting
 
-### 1. Google Programmable Search Engine
+### 1. Brave Search API Key
 
-1. Go to [programmablesearchengine.google.com](https://programmablesearchengine.google.com/) → **Add**
-2. Toggle **Image search** to **On**
-3. Under **Sites to search**, add the sites from [`assets/sites-to-search.xml`](assets/sites-to-search.xml)
-4. **Save** and copy your **Search Engine ID** (`cx`)
-5. You can edit this site list anytime from the control panel
+1. Go to [brave.com/search/api](https://brave.com/search/api/)
+2. Click **Get Started**
+3. Create a Brave account or sign in
+4. Choose the **Free** plan (2,000 queries/month) or a paid plan
+5. Once subscribed, go to your [API dashboard](https://api.search.brave.com/app/#/subscriptions)
+6. Copy your **API key** (starts with `BSA...`)
 
-### 2. Google Custom Search API Key
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project → **APIs & Services → Library**
-3. Enable **Custom Search API**
-4. **APIs & Services → Credentials → Create Credentials → API Key**
-
-### 3. Cloudflare Resources
+### 2. Cloudflare Resources
 
 Create in your Cloudflare dashboard:
 
@@ -99,7 +93,7 @@ Create in your Cloudflare dashboard:
 | KV Namespace | `DIRECT_IMG_CACHE` | Cache existence + timestamp |
 | KV Namespace | `DIRECT_IMG_RATE` | Per-IP daily search counter |
 
-### 4. Pages Bindings
+### 3. Pages Bindings
 
 **Settings → Functions → Bindings:**
 
@@ -109,23 +103,22 @@ Create in your Cloudflare dashboard:
 | KV Namespace | `DIRECT_IMG_CACHE` | `DIRECT_IMG_CACHE` |
 | KV Namespace | `DIRECT_IMG_RATE` | `DIRECT_IMG_RATE` |
 
-### 5. Secrets
+### 4. Secrets
 
 **Settings → Environment variables:**
 
 | Variable | Description |
 |---|---|
-| `GOOGLE_API_KEY` | Custom Search API key |
-| `GOOGLE_CSE_ID` | Search Engine ID (`cx`) |
+| `BRAVE_API_KEY` | Brave Search API key |
 
-### 6. WAF Rules
+### 5. WAF Rules
 
 **Security → WAF → Rate limiting rules:**
 
 1. **Global** — 60 req/min per IP → Block 60s
 2. **Burst** — 10 req/10s per IP → Challenge
 
-### 7. Deploy
+### 6. Deploy
 
 Fork this repo, connect to Cloudflare Pages, deploy.
 
@@ -153,7 +146,7 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 - **Cloudflare R2** — image storage
 - **Cloudflare KV** — cache + rate limiting
 - **Cloudflare WAF** — rate limiting + DDoS protection
-- **Google Custom Search API** — image sourcing
+- **Brave Image Search API** — image sourcing
 
 ---
 
