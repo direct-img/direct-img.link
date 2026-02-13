@@ -57,7 +57,7 @@ as the image URL. Use + to separate words. Example: ![orange cat](https://direct
 
 - **10 new searches per day per IP** (resets at midnight UTC)
 - **Cache hits are unlimited** (within WAF limits above)
-- **Brave API quota:** Free plan includes 2,000 queries/month
+- **Brave API quota:** $5 free monthly credits (1,000 queries), then $5/1k requests
 
 ## Caching
 
@@ -79,8 +79,8 @@ Free community service. Donations help cover API and infrastructure costs.
 1. Go to [brave.com/search/api](https://brave.com/search/api/)
 2. Click **Get Started**
 3. Create a Brave account or sign in
-4. Choose the **Free** plan (2,000 queries/month) or a paid plan
-5. Once subscribed, go to your [API dashboard](https://api.search.brave.com/app/#/subscriptions)
+4. Subscribe — you get **$5 in free monthly credits** (covers 1,000 queries/month)
+5. Go to your [API dashboard](https://api.search.brave.com/app/#/subscriptions)
 6. Copy your **API key** (starts with `BSA...`)
 
 ### 2. Cloudflare Resources
