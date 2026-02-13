@@ -78,61 +78,7 @@ Free community service. Donations help cover API and infrastructure costs.
 
 1. Go to [programmablesearchengine.google.com](https://programmablesearchengine.google.com/) → **Add**
 2. Toggle **Image search** to **On**
-3. Under **Sites to search**, click **Add** and paste these (one per line):
-
-```
-*.wikimedia.org/*
-*.wikipedia.org/*
-*.reddit.com/*
-*.imgur.com/*
-*.flickr.com/*
-*.unsplash.com/*
-*.pexels.com/*
-*.pixabay.com/*
-*.pinimg.com/*
-*.deviantart.com/*
-*.artstation.com/*
-*.500px.com/*
-*.gettyimages.com/*
-*.alamy.com/*
-*.shutterstock.com/*
-*.istockphoto.com/*
-*.nationalgeographic.com/*
-*.smithsonianmag.com/*
-*.britannica.com/*
-*.nasa.gov/*
-*.si.edu/*
-*.imdb.com/*
-*.themoviedb.org/*
-*.espn.com/*
-*.cnn.com/*
-*.bbc.co.uk/*
-*.reuters.com/*
-*.apnews.com/*
-*.nytimes.com/*
-*.theguardian.com/*
-*.amazon.com/*
-*.ebay.com/*
-*.etsy.com/*
-*.foodnetwork.com/*
-*.allrecipes.com/*
-*.seriouseats.com/*
-*.architecturaldigest.com/*
-*.nature.com/*
-*.sciencephoto.com/*
-*.wired.com/*
-*.theverge.com/*
-*.techcrunch.com/*
-*.rottentomatoes.com/*
-*.billboard.com/*
-*.vogue.com/*
-*.gq.com/*
-*.webmd.com/*
-*.mayoclinic.org/*
-*.space.com/*
-*.worldwildlife.org/*
-```
-
+3. Under **Sites to search**, add the sites from [`assets/sites-to-search.xml`](assets/sites-to-search.xml)
 4. **Save** and copy your **Search Engine ID** (`cx`)
 5. You can edit this site list anytime from the control panel
 
