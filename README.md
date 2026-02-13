@@ -22,7 +22,7 @@ That's it. The image is searched, cached, and served.
 
 ## URL Format
 
-Use `+` to separate words:
+Use `+` to separate words, like Google:
 
 ```
 https://direct-img.link/orange+cat
