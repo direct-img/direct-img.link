@@ -76,7 +76,7 @@ Only fresh searches that call the image API count toward the daily limit. If you
 
 This is a free community service. Donations help cover API and infrastructure costs, and allow us to offer higher rate limits for everyone.
 
-<!-- TODO: add donation link -->
+**BTC Address:** `bc1qkqdmhk0we49qn74ua9752ysfxzd7uxqettymhv`
 
 ---
 
