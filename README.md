@@ -17,8 +17,8 @@ That's it. The image is searched, cached, and served.
 ## How It Works
 
 1. A request hits `direct-img.link/<query>`
-2. If cached (within 30 days) → serves the image instantly from edge
-3. If not cached → searches via Brave Image Search API → compresses to WebP → caches in R2 → serves
+2. If cached (within 30 days) → serves the image instantly from R2
+3. If not cached → searches via Brave Image Search API → stores in R2 → serves
 
 ## URL Format
 
@@ -63,6 +63,7 @@ as the image URL. Use + to separate words. Example: ![orange cat](https://direct
 
 - Images are cached for **30 days**
 - After expiry, the next request triggers a fresh search
+- Images are stored in their original format as fetched from source
 
 ## Support
 
@@ -89,8 +90,8 @@ Create in your Cloudflare dashboard:
 
 | Resource | Name | Purpose |
 |---|---|---|
-| R2 Bucket | `direct-img-store` | Stores compressed WebP images |
-| KV Namespace | `DIRECT_IMG_CACHE` | Cache existence + timestamp |
+| R2 Bucket | `direct-img-store` | Stores cached images |
+| KV Namespace | `DIRECT_IMG_CACHE` | Cache existence + content type + timestamp |
 | KV Namespace | `DIRECT_IMG_RATE` | Per-IP daily search counter |
 
 ### 3. Pages Bindings
@@ -128,11 +129,11 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 
 ### R2: `direct-img-store`
 
-**Key:** `<sha256-of-normalized-query>.webp` — derived from query, no lookup needed.
+**Key:** `<sha256-of-normalized-query>` — derived from query, no lookup needed. Stored with original content type from source.
 
 ### KV: `DIRECT_IMG_CACHE`
 
-**Key:** normalized query (lowercase, trimmed) → **Value:** `{"t":1719000000}` — **TTL:** 30 days
+**Key:** normalized query (lowercase, trimmed) → **Value:** `{"t":1719000000,"ct":"image/jpeg"}` — **TTL:** 30 days
 
 ### KV: `DIRECT_IMG_RATE`
 
