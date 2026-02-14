@@ -103,9 +103,10 @@ Create in your Cloudflare dashboard:
 
 **Settings → Environment variables:**
 
-| Variable | Description |
-|---|---|
-| `BRAVE_API_KEY` | Brave Search API key |
+| Variable | Description | Required |
+|---|---|---|
+| `BRAVE_API_KEY` | Brave Search API key | Yes |
+| `NTFY_URL` | ntfy.sh topic URL for traffic/error alerts | Optional |
 
 ### 5. WAF Rules
 
