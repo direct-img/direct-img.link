@@ -26,7 +26,6 @@
             margin: 0;
             display: flex;
             flex-direction: column;
-            min-height: 100vh;
             align-items: center;
         }
 
@@ -34,7 +33,6 @@
             max-width: 680px;
             width: 100%;
             padding: 80px 24px;
-            flex: 1;
         }
 
         h1 {
@@ -51,7 +49,7 @@
         }
 
         .status-notice {
-            padding: 16px;
+            padding: 20px;
             background: #fff5f5;
             border: 1px solid #ffe0e0;
             border-radius: var(--radius);
@@ -60,22 +58,34 @@
 
         .status-notice p {
             margin: 0;
-            font-size: 0.95rem;
-            color: var(--text);
+            font-size: 1rem;
         }
 
         .status-notice strong {
             color: var(--warning);
         }
 
-        .usage {
+        .btc-address {
+            font-family: monospace;
+            background: rgba(0,0,0,0.05);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            word-break: break-all;
+            display: inline-block;
+            margin-top: 12px;
+        }
+
+        section {
             margin-bottom: 48px;
         }
 
         h2 {
-            font-size: 1.25rem;
-            font-weight: 600;
+            font-size: 1.5rem;
+            font-weight: 700;
             margin-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
         }
 
         pre {
@@ -91,11 +101,28 @@
             font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
         }
 
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 16px 0;
+            font-size: 0.9rem;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
         .grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 16px;
-            margin-top: 24px;
         }
 
         .card {
@@ -115,17 +142,6 @@
             color: var(--text-muted);
         }
 
-        .btc-address {
-            font-family: monospace;
-            background: var(--code-bg);
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            word-break: break-all;
-            display: inline-block;
-            margin-top: 8px;
-        }
-
         footer {
             width: 100%;
             max-width: 680px;
@@ -135,6 +151,7 @@
             font-size: 0.9rem;
             display: flex;
             justify-content: space-between;
+            margin-top: auto;
         }
 
         a {
@@ -160,43 +177,94 @@
 
         <section class="status-notice">
             <p>
-                This service is <strong>free</strong> to use. However, API and infrastructure costs are significant. 
+                This service is <strong>free</strong> to use. However, search API and server costs are high. 
                 Without community donations, <strong>this project will die quickly.</strong>
             </p>
             <div class="btc-address">BTC: bc1qkqdmhk0we49qn74ua9752ysfxzd7uxqettymhv</div>
         </section>
 
-        <section class="usage">
+        <section>
+            <h2>URL Format</h2>
+            <p>Use <code>+</code> to separate words, just like a Google search. Encode special characters as needed.</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Query</th>
+                        <th>URL Path</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>orange cat</td>
+                        <td><code>/orange+cat</code></td>
+                    </tr>
+                    <tr>
+                        <td>spider-man</td>
+                        <td><code>/spider-man</code></td>
+                    </tr>
+                    <tr>
+                        <td>90's fashion</td>
+                        <td><code>/90%27s+fashion</code></td>
+                    </tr>
+                    <tr>
+                        <td>"exact phrase"</td>
+                        <td><code>/%22exact+phrase%22</code></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
             <h2>Usage</h2>
-            <p>Give your AI a system instruction to embed images using this service. No uploads, no APIs, no tokens.</p>
-            <pre><code>![orange cat](https://direct-img.link/orange+cat)
-![sunset at beach](https://direct-img.link/sunset+at+beach)</code></pre>
+            <p>Embed directly in your markdown files or AI system prompts:</p>
+            <pre><code>![orange cat](https://direct-img.link/orange+cat)</code></pre>
+        </section>
+
+        <section>
+            <h2>Rate Limits</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Scope</th>
+                        <th>Limit</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Global Traffic</td>
+                        <td>60 req/min per IP</td>
+                        <td>Block (1 min)</td>
+                    </tr>
+                    <tr>
+                        <td>Burst Protection</td>
+                        <td>10 req/10s per IP</td>
+                        <td>Challenge</td>
+                    </tr>
+                    <tr>
+                        <td>New Searches</td>
+                        <td>10 per day per IP</td>
+                        <td>Cache only</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p style="font-size: 0.85rem; color: var(--text-muted);">* Cache hits are unlimited within global traffic limits.</p>
         </section>
 
         <section class="grid">
             <div class="card">
-                <h3>Rate Limits</h3>
-                <p>60 requests/min per IP. 10 new searches per day. Cache hits are unlimited.</p>
-            </div>
-            <div class="card">
                 <h3>Caching</h3>
-                <p>Images are cached for 30 days for instant delivery on subsequent requests.</p>
+                <p>Images are cached for 30 days. Subsequent requests for the same query are served instantly.</p>
             </div>
             <div class="card">
                 <h3>Privacy</h3>
-                <p>No tracking or analytics. Queries are normalized and hashed before storage.</p>
-            </div>
-            <div class="card">
-                <h3>Open Source</h3>
-                <p>Self-host your own instance or contribute to the project on GitHub.</p>
+                <p>No tracking or analytics. Queries are normalized and hashed before being stored.</p>
             </div>
         </section>
     </main>
 
     <footer>
-        <div>
-            Built for the AI era.
-        </div>
+        <div>Built for the AI era.</div>
         <div>
             <a href="https://github.com/direct-img/direct-img.link">GitHub</a>
         </div>
