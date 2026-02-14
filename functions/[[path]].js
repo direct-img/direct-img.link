@@ -175,40 +175,26 @@ async function braveImageSearch(query, apiKey) {
 
 async function fetchImage(imageUrl) {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
     const res = await fetch(imageUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
       },
       redirect: "follow",
-      signal: controller.signal,
+      signal: AbortSignal.timeout(5000),
       cf: { cacheTtl: 0 },
     });
 
-    if (!res.ok) {
-      clearTimeout(timeoutId);
-      return null;
-    }
+    if (!res.ok) return null;
 
     const ct = res.headers.get("content-type") || "";
-    if (!ct.startsWith("image/")) {
-      clearTimeout(timeoutId);
-      return null;
-    }
+    if (!ct.startsWith("image/")) return null;
 
     // Check for massive files that might crash the worker (> 10MB)
     const size = res.headers.get("content-length");
-    if (size && parseInt(size) > 10485760) {
-      clearTimeout(timeoutId);
-      return null;
-    }
+    if (size && parseInt(size) > 10485760) return null;
 
-    // Consume body inside timeout scope so abort covers the full download
     const buffer = await res.arrayBuffer();
-    clearTimeout(timeoutId);
 
     // Final size check for chunked responses without content-length
     if (buffer.byteLength > 10485760) return null;
