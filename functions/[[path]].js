@@ -71,11 +71,14 @@ export async function onRequest(context) {
     return jsonResponse(404, { error: "No image found for query" });
   }
 
-  // 4. Robust Fetch: Try results until one works
+  // 4. Robust Fetch: Try all results with a 20s global deadline
+  const GLOBAL_DEADLINE = Date.now() + 20000;
   let imgResult = null;
 
   for (const imgUrl of imageUrls) {
-    imgResult = await fetchImage(imgUrl);
+    const remaining = GLOBAL_DEADLINE - Date.now();
+    if (remaining <= 500) break;
+    imgResult = await fetchImage(imgUrl, Math.min(remaining, 5000));
     if (imgResult) break;
   }
 
@@ -173,7 +176,7 @@ async function braveImageSearch(query, apiKey) {
     .filter(url => !!url);
 }
 
-async function fetchImage(imageUrl) {
+async function fetchImage(imageUrl, timeoutMs = 5000) {
   try {
     const res = await fetch(imageUrl, {
       headers: {
@@ -181,7 +184,7 @@ async function fetchImage(imageUrl) {
         "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
       },
       redirect: "follow",
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(timeoutMs),
       cf: { cacheTtl: 0 },
     });
 
