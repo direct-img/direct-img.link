@@ -16,12 +16,6 @@ Give your AI a system instruction to embed images using `direct-img.link` and th
 
 That's it. The image is searched, cached, and served.
 
-## How It Works
-
-1. A request hits `direct-img.link/<query>`
-2. If cached (within 30 days) → serves the image instantly from R2
-3. If not cached → searches via Brave Image Search API → stores in R2 → serves
-
 ## URL Format
 
 Use `+` to separate words, like Google:
@@ -48,12 +42,11 @@ as the image URL. Use + to separate words. Example: ![orange cat](https://direct
 
 ## Rate Limits
 
-### Global (Cloudflare WAF)
+### WAF Protection (Cloudflare Free)
 
 | Rule | Limit | Action |
 |---|---|---|
-| Global rate limit | 60 requests/min per IP | Block for 1 min |
-| Burst protection | 10 requests/10s per IP | Challenge |
+| Rate Limit | 10 requests/10s per IP | Block for 10s |
 
 ### New Searches (Cache Misses)
 
@@ -118,8 +111,7 @@ Create in your Cloudflare dashboard:
 
 **Security → WAF → Rate limiting rules:**
 
-1. **Global** — 60 req/min per IP → Block 60s
-2. **Burst** — 10 req/10s per IP → Challenge
+1. **Rate Limit** — 10 req/10s per IP → Block 10s
 
 ### 6. Deploy
 
