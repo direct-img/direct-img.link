@@ -59,7 +59,7 @@ export async function onRequest(context) {
   // Notify of a new search (Cache Miss)
   context.waitUntil(notify(env, {
     title: "New Search",
-    message: `Query: ${query} (Search #${count + 1} for ${ip})`,
+    message: `Query: ${query} (Search #${count + 1} for ${ip})\n${url.origin}/${path}`,
     tags: "mag",
     priority: 3
   }));
