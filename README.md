@@ -88,7 +88,7 @@ Use images sparingly to complement your responses — not every message needs on
 
 ### New Searches (Cache Misses)
 
-- **10 new searches per day per IP** (resets at midnight UTC)
+- **25 new searches per day per IP** (resets at midnight UTC)
 - **Cache hits are unlimited** (within WAF limits above)
 - **Brave API quota:** $5 free monthly credits (1,000 queries), then $5/1k requests
 
