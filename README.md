@@ -31,13 +31,23 @@ https://direct-img.link/new+york+city
 | spider-man | `/spider-man` |
 | u.s. president | `/u.s.+president` |
 | 90's fashion | `/90%27s+fashion` |
-| "exact phrase" | `/%22exact+phrase%22` |
 
 ## For AI System Prompts
 
+Add this to your system instructions:
+
 ```
-When including images in your markdown responses, use https://direct-img.link/<query>
-as the image URL. Use + to separate words. Example: ![orange cat](https://direct-img.link/orange+cat)
+When writing markdown, you can embed relevant images using direct-img.link — a free image search proxy that returns images directly from a URL.
+
+Format:
+![alt text](https://direct-img.link/<search+query>)
+
+Examples:
+![orange cat](https://direct-img.link/orange+cat)
+![US president](https://direct-img.link/u.s.+president)
+![90's fashion](https://direct-img.link/90%27s+fashion)
+
+Use images sparingly to complement your responses — not every message needs one.
 ```
 
 ## Rate Limits
