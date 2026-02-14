@@ -32,6 +32,34 @@ https://direct-img.link/new+york+city
 | u.s. president | `/u.s.+president` |
 | 90's fashion | `/90%27s+fashion` |
 
+## Query Normalization
+
+All queries are normalized before caching and searching:
+
+| Rule | Example | Result |
+|---|---|---|
+| `+` and `%20` are treated as spaces | `orange+cat`, `orange%20cat` | `orange cat` |
+| Lowercased | `Orange+Cat` | `orange cat` |
+| Trimmed | `+orange+cat+` | `orange cat` |
+| Multiple spaces collapsed | `orange++cat` | `orange cat` |
+| Trailing slashes stripped | `orange+cat/` | `orange cat` |
+| Control characters removed | `orange\x00cat` | `orangecat` |
+| **Max length: 200 characters** | — | 400 error if exceeded |
+
+### Characters that work fine
+
+- **Letters, numbers, spaces** — standard queries
+- **Hyphens** (`spider-man`), **dots** (`node.js`), **apostrophes** (`90's`) — passed through
+- **Slashes** (`AC/DC`) — kept as-is in the normalized query
+- **Unicode** (`café`, `日本`) — supported via URL encoding
+
+### Things to know
+
+- **Query parameters (`?...`)** are ignored — `/orange+cat?size=large` → `orange cat`
+- **Fragments (`#...`)** are never sent to the server by browsers
+- **Double-encoded values** are decoded once — `%2520` becomes `%20` (literal), not a space
+- Two queries that normalize to the same string share the same cached image
+
 ## For AI System Prompts
 
 Add this to your system instructions:
@@ -138,7 +166,7 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 
 ### KV: `DIRECT_IMG_CACHE`
 
-**Key:** normalized query (lowercase, trimmed) → **Value:** `{"t":1719000000,"ct":"image/jpeg"}` — **TTL:** 30 days
+**Key:** normalized query (lowercase, trimmed, max 200 chars) → **Value:** `{"t":1719000000,"ct":"image/jpeg"}` — **TTL:** 30 days
 
 ### KV: `DIRECT_IMG_RATE`
 
