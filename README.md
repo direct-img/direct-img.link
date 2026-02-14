@@ -71,7 +71,7 @@ Format:
 ![alt text](https://direct-img.link/<search+query>)
 
 Examples:
-![orange cat](https://direct-img.link/orange+cat)
+![panda eat](https://direct-img.link/panda+eat)
 ![US president](https://direct-img.link/u.s.+president)
 ![90's fashion](https://direct-img.link/90%27s+fashion)
 
