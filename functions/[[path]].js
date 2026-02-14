@@ -13,6 +13,11 @@ export async function onRequest(context) {
     return jsonResponse(400, { error: "Empty query" });
   }
 
+  // Max query length: 200 chars after normalization
+  if (query.length > 200) {
+    return jsonResponse(400, { error: "Query too long (max 200 characters)" });
+  }
+
   const cacheKey = query;
   const r2Key = await sha256(query);
 
@@ -143,9 +148,19 @@ async function notify(env, { title, message, tags, priority }) {
 function normalizeQuery(path) {
   try {
     const decoded = decodeURIComponent(path.replace(/\+/g, " "));
-    return decoded.toLowerCase().trim();
+    return decoded
+      .toLowerCase()
+      .trim()
+      .replace(/[\x00-\x1f]/g, "")  // Strip null bytes and control chars
+      .replace(/\/+$/, "")            // Strip trailing slashes
+      .replace(/\s+/g, " ");          // Collapse multiple spaces
   } catch {
-    return path.toLowerCase().trim();
+    return path
+      .toLowerCase()
+      .trim()
+      .replace(/[\x00-\x1f]/g, "")
+      .replace(/\/+$/, "")
+      .replace(/\s+/g, " ");
   }
 }
 
