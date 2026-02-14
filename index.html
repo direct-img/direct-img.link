@@ -119,12 +119,6 @@
             font-weight: 600;
         }
 
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-
         .card {
             border: 1px solid var(--border);
             padding: 16px;
@@ -164,7 +158,6 @@
         }
 
         @media (max-width: 600px) {
-            .grid { grid-template-columns: 1fr; }
             h1 { font-size: 2rem; }
         }
     </style>
@@ -177,7 +170,7 @@
 
         <section class="status-notice">
             <p>
-                This service is <strong>free</strong> to use. However, search API and server costs are high. 
+                This service is <strong>free</strong> to use. However, search API and server costs are high.
                 Without community donations, <strong>this project will die quickly.</strong>
             </p>
             <p style="margin-top: 10px;">
@@ -187,39 +180,24 @@
         </section>
 
         <section>
-            <h2>URL Format</h2>
-            <p>Use <code>+</code> to separate words, just like a Google search. Encode special characters as needed.</p>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Query</th>
-                        <th>URL Path</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>orange cat</td>
-                        <td><code>/orange+cat</code></td>
-                    </tr>
-                    <tr>
-                        <td>spider-man</td>
-                        <td><code>/spider-man</code></td>
-                    </tr>
-                    <tr>
-                        <td>90's fashion</td>
-                        <td><code>/90%27s+fashion</code></td>
-                    </tr>
-                    <tr>
-                        <td>"exact phrase"</td>
-                        <td><code>/%22exact+phrase%22</code></td>
-                    </tr>
-                </tbody>
-            </table>
+            <h2>For AI System Prompts</h2>
+            <p>Add this to your system instructions:</p>
+            <pre><code>When writing markdown, you can embed relevant images using direct-img.link — a free image search proxy that returns images directly from a URL.
+
+Format:
+![alt text](https://direct-img.link/&lt;search+query&gt;)
+
+Examples:
+![orange cat](https://direct-img.link/orange+cat)
+![US president](https://direct-img.link/u.s.+president)
+![90's fashion](https://direct-img.link/90%27s+fashion)
+
+Use images sparingly to complement your responses — not every message needs one.</code></pre>
         </section>
 
         <section>
             <h2>Usage</h2>
-            <p>Embed directly in your markdown files or AI system prompts:</p>
+            <p>Embed directly in your markdown files:</p>
             <pre><code>![orange cat](https://direct-img.link/orange+cat)</code></pre>
         </section>
 
@@ -249,14 +227,10 @@
             <p style="font-size: 0.85rem; color: var(--text-muted);">* Cache hits are unlimited within global traffic limits.</p>
         </section>
 
-        <section class="grid">
+        <section>
             <div class="card">
                 <h3>Caching</h3>
                 <p>Images are cached for 30 days. Subsequent requests for the same query are served instantly.</p>
-            </div>
-            <div class="card">
-                <h3>Privacy</h3>
-                <p>No tracking or analytics. Queries are normalized and hashed before being stored.</p>
             </div>
         </section>
     </main>
