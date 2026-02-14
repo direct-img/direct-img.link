@@ -44,7 +44,7 @@ export async function onRequest(context) {
   const rateData = await env.DIRECT_IMG_RATE.get(rateKey, "json");
   const count = rateData?.c || 0;
 
-  if (count >= 10) {
+  if (count >= 25) {
     context.waitUntil(notify(env, {
       title: "Rate Limit Hit",
       message: `IP ${ip} reached limit for: ${query}`,
@@ -52,7 +52,7 @@ export async function onRequest(context) {
       priority: 2
     }));
     return jsonResponse(429, {
-      error: "Daily search limit reached (10/day). Cached images remain available.",
+      error: "Daily search limit reached (25/day). Cached images remain available.",
     });
   }
 
