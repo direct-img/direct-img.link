@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>direct-img.link | Live images in markdown</title>
+    <meta name="description" content="Embed live images in markdown powered by search. No APIs, no tokens, just search.">
+    <style>
+        :root {
+            --bg: #ffffff;
+            --text: #1a1a1a;
+            --text-muted: #666666;
+            --accent: #0070f3;
+            --code-bg: #f5f5f5;
+            --border: #eaeaea;
+            --radius: 8px;
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: var(--text);
+            background-color: var(--bg);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            align-items: center;
+        }
+
+        main {
+            max-width: 680px;
+            width: 100%;
+            padding: 80px 24px;
+            flex: 1;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 8px;
+        }
+
+        p.tagline {
+            font-size: 1.25rem;
+            color: var(--text-muted);
+            margin-bottom: 48px;
+        }
+
+        .search-demo {
+            margin-bottom: 48px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 8px;
+            background: var(--code-bg);
+            padding: 8px;
+            border-radius: var(--radius);
+            border: 1px solid var(--border);
+        }
+
+        .input-group span {
+            color: var(--text-muted);
+            padding-left: 8px;
+            display: flex;
+            align-items: center;
+            user-select: none;
+        }
+
+        input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: 1rem;
+            outline: none;
+            color: var(--text);
+            padding: 4px 0;
+        }
+
+        .usage {
+            margin-top: 48px;
+        }
+
+        h2 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        pre {
+            background: var(--code-bg);
+            padding: 16px;
+            border-radius: var(--radius);
+            overflow-x: auto;
+            font-size: 0.9rem;
+            border: 1px solid var(--border);
+            position: relative;
+        }
+
+        code {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        }
+
+        .copy-hint {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+            text-align: right;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 24px;
+        }
+
+        .card {
+            border: 1px solid var(--border);
+            padding: 16px;
+            border-radius: var(--radius);
+        }
+
+        .card h3 {
+            margin: 0 0 8px 0;
+            font-size: 1rem;
+        }
+
+        footer {
+            width: 100%;
+            max-width: 680px;
+            padding: 40px 24px;
+            border-top: 1px solid var(--border);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+
+        @media (max-width: 600px) {
+            .grid { grid-template-columns: 1fr; }
+            h1 { font-size: 2rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <main>
+        <h1>direct-img.link</h1>
+        <p class="tagline">Live images in markdown, powered by search.</p>
+
+        <section class="search-demo">
+            <h2>Try it out</h2>
+            <div class="input-group">
+                <span>direct-img.link/</span>
+                <input type="text" id="queryInput" placeholder="orange+cat" spellcheck="false">
+            </div>
+            <div class="copy-hint" id="urlPreview">![image](https://direct-img.link/orange+cat)</div>
+        </section>
+
+        <section class="usage">
+            <h2>Usage</h2>
+            <p>Give your AI a system instruction to embed images using this service. No uploads, no APIs, no tokens.</p>
+            <pre><code>![orange cat](https://direct-img.link/orange+cat)
+![sunset at beach](https://direct-img.link/sunset+at+beach)</code></pre>
+        </section>
+
+        <section class="grid">
+            <div class="card">
+                <h3>Caching</h3>
+                <p>Images are cached for 30 days in R2 for instant delivery.</p>
+            </div>
+            <div class="card">
+                <h3>Privacy</h3>
+                <p>No tracking. Queries are normalized and hashed.</p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div>
+            Built for the AI era.
+        </div>
+        <div>
+            <a href="https://github.com/direct-img/direct-img.link">GitHub</a>
+        </div>
+    </footer>
+
+    <script>
+        const input = document.getElementById('queryInput');
+        const preview = document.getElementById('urlPreview');
+
+        input.addEventListener('input', (e) => {
+            const val = e.target.value.trim().replace(/\s+/g, '+') || 'orange+cat';
+            preview.textContent = `![image](https://direct-img.link/${val})`;
+        });
+    </script>
+</body>
+</html>
