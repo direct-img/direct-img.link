@@ -109,6 +109,12 @@
             font-size: 1rem;
         }
 
+        .card p {
+            margin: 0;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
         .btc-address {
             font-family: monospace;
             background: var(--code-bg);
@@ -169,12 +175,20 @@
 
         <section class="grid">
             <div class="card">
+                <h3>Rate Limits</h3>
+                <p>60 requests/min per IP. 10 new searches per day. Cache hits are unlimited.</p>
+            </div>
+            <div class="card">
                 <h3>Caching</h3>
-                <p>Images are cached for 30 days in R2 for instant delivery.</p>
+                <p>Images are cached for 30 days for instant delivery on subsequent requests.</p>
             </div>
             <div class="card">
                 <h3>Privacy</h3>
-                <p>No tracking. Queries are normalized and hashed.</p>
+                <p>No tracking or analytics. Queries are normalized and hashed before storage.</p>
+            </div>
+            <div class="card">
+                <h3>Open Source</h3>
+                <p>Self-host your own instance or contribute to the project on GitHub.</p>
             </div>
         </section>
     </main>
