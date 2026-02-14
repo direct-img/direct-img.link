@@ -4,7 +4,7 @@ export async function onRequest(context) {
   const path = params.path?.join("/") || "";
 
   // Serve static assets for root or standard files
-  if (!path || path === "index.html" || path === "favicon.ico" || path === "robots.txt") {
+  if (!path || path === "index.html" || path === "favicon.ico" || path === "robots.txt" || path === "limit.webp") {
     return env.ASSETS.fetch(request);
   }
 
@@ -51,9 +51,9 @@ export async function onRequest(context) {
       tags: "warning,no_entry",
       priority: 2
     }));
-    return jsonResponse(429, {
-      error: "Daily search limit reached (25/day). Cached images remain available.",
-    });
+    // Serve the limit meme image instead of JSON
+    const limitReq = new Request(new URL("/limit.webp", url.origin));
+    return env.ASSETS.fetch(limitReq);
   }
 
   // Notify of a new search (Cache Miss)
