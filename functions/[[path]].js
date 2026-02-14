@@ -16,12 +16,11 @@ export async function onRequest(context) {
   const cacheKey = query;
   const r2Key = await sha256(query);
 
-  // 1. Check KV cache. If it exists, KV's native TTL ensures it's < 30 days old.
+  // 1. Check KV cache
   const cached = await env.DIRECT_IMG_CACHE.get(cacheKey, "json");
   if (cached) {
     const obj = await env.R2_IMAGES.get(r2Key);
     if (obj) {
-      // Calculate remaining TTL for the browser cache header
       const nowSec = Math.floor(Date.now() / 1000);
       const thirtyDaysSec = 30 * 24 * 60 * 60;
       const remainingSec = Math.max(0, (cached.t + thirtyDaysSec) - nowSec);
@@ -30,7 +29,6 @@ export async function onRequest(context) {
         headers: imageHeaders(cached.ct, remainingSec * 1000),
       });
     }
-    // If KV exists but R2 is missing (edge case), we fall through to re-fetch.
   }
 
   // 2. Cache miss — check rate limit
@@ -42,46 +40,105 @@ export async function onRequest(context) {
   const count = rateData?.c || 0;
 
   if (count >= 10) {
+    context.waitUntil(notify(env, {
+      title: "Rate Limit Hit",
+      message: `IP ${ip} reached limit for: ${query}`,
+      tags: "warning,no_entry",
+      priority: 2
+    }));
     return jsonResponse(429, {
       error: "Daily search limit reached (10/day). Cached images remain available.",
     });
   }
 
-  // 3. Fetch from Brave Image Search
-  const imageResult = await braveImageSearch(query, env.BRAVE_API_KEY);
-  if (!imageResult) {
+  // Notify of a new search (Cache Miss)
+  context.waitUntil(notify(env, {
+    title: "New Search",
+    message: `Query: ${query} (Search #${count + 1} for ${ip})`,
+    tags: "mag",
+    priority: 3
+  }));
+
+  // 3. Fetch from Brave Image Search (returns array of potential URLs)
+  const imageUrls = await braveImageSearch(query, env.BRAVE_API_KEY);
+  if (!imageUrls || imageUrls.length === 0) {
+    context.waitUntil(notify(env, {
+      title: "Search Failed",
+      message: `No results found for: ${query}`,
+      tags: "question",
+      priority: 3
+    }));
     return jsonResponse(404, { error: "No image found for query" });
   }
 
-  // 4. Fetch the actual image bytes
-  const imgResponse = await fetchImage(imageResult);
-  if (!imgResponse) {
-    return jsonResponse(502, { error: "Failed to fetch image from source" });
+  // 4. Robust Fetch: Try results until one works
+  let imgResponse = null;
+  let finalContentType = "image/jpeg";
+
+  for (const imgUrl of imageUrls) {
+    imgResponse = await fetchImage(imgUrl);
+    if (imgResponse) {
+      finalContentType = imgResponse.headers.get("content-type") || "image/jpeg";
+      break; 
+    }
   }
 
-  const contentType = imgResponse.headers.get("content-type") || "image/jpeg";
+  if (!imgResponse) {
+    context.waitUntil(notify(env, {
+      title: "Fetch Error (502)",
+      message: `All sources failed for: ${query}`,
+      tags: "boom,x",
+      priority: 4
+    }));
+    return jsonResponse(502, { error: "Failed to fetch image from all available sources" });
+  }
+
   const imgBuffer = await imgResponse.arrayBuffer();
 
   // 5. Store in R2
   await env.R2_IMAGES.put(r2Key, imgBuffer, {
-    httpMetadata: { contentType },
+    httpMetadata: { contentType: finalContentType },
   });
 
   // 6. Store in KV cache (TTL 30 days)
   const nowSec = Math.floor(Date.now() / 1000);
   const TTL_SECONDS = 30 * 24 * 60 * 60;
-  await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: nowSec, ct: contentType }), {
+  await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: nowSec, ct: finalContentType }), {
     expirationTtl: TTL_SECONDS,
   });
 
-  // 7. Increment rate limit (TTL 48h to ensure it covers the full UTC day)
+  // 7. Increment rate limit
   await env.DIRECT_IMG_RATE.put(rateKey, JSON.stringify({ c: count + 1 }), {
     expirationTtl: 48 * 60 * 60,
   });
 
   return new Response(imgBuffer, {
-    headers: imageHeaders(contentType, TTL_SECONDS * 1000),
+    headers: imageHeaders(finalContentType, TTL_SECONDS * 1000),
   });
+}
+
+/**
+ * Sends a notification to ntfy. Uses context.waitUntil to avoid latency.
+ */
+async function notify(env, { title, message, tags, priority }) {
+  if (!env.NTFY_URL) return;
+  
+  // Ensure protocol is present as requested by Meowster
+  const endpoint = env.NTFY_URL.startsWith("http") ? env.NTFY_URL : `https://${env.NTFY_URL}`;
+  
+  try {
+    await fetch(endpoint, {
+      method: "POST",
+      body: message,
+      headers: {
+        "Title": title,
+        "Tags": tags,
+        "Priority": priority.toString(),
+      },
+    });
+  } catch (e) {
+    console.error("Notification failed", e);
+  }
 }
 
 function normalizeQuery(path) {
@@ -99,13 +156,11 @@ async function sha256(str) {
 }
 
 async function braveImageSearch(query, apiKey) {
-  // Changed safesearch from 'moderate' to 'off' as per API requirements
-  const searchUrl = `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(query)}&count=5&safesearch=off`;
+  const searchUrl = `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(query)}&count=10&safesearch=off`;
 
   const res = await fetch(searchUrl, {
     headers: {
       "Accept": "application/json",
-      "Accept-Encoding": "gzip",
       "X-Subscription-Token": apiKey,
     },
   });
@@ -116,28 +171,37 @@ async function braveImageSearch(query, apiKey) {
   const results = data.results;
   if (!results?.length) return null;
 
-  for (const r of results) {
-    const src = r.properties?.url || r.thumbnail?.src;
-    if (src) return src;
-  }
-  return null;
+  // Return all valid URLs to try them sequentially
+  return results
+    .map(r => r.properties?.url || r.thumbnail?.src)
+    .filter(url => !!url);
 }
 
 async function fetchImage(imageUrl) {
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout per image
+
     const res = await fetch(imageUrl, {
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; direct-img-bot/1.0)",
-        "Accept": "image/*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
       },
       redirect: "follow",
+      signal: controller.signal,
       cf: { cacheTtl: 0 },
     });
+
+    clearTimeout(timeoutId);
 
     if (!res.ok) return null;
 
     const ct = res.headers.get("content-type") || "";
     if (!ct.startsWith("image/")) return null;
+
+    // Check for massive files that might crash the worker (> 10MB)
+    const size = res.headers.get("content-length");
+    if (size && parseInt(size) > 10485760) return null;
 
     return res;
   } catch {
