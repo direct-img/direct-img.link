@@ -72,18 +72,14 @@ export async function onRequest(context) {
   }
 
   // 4. Robust Fetch: Try results until one works
-  let imgResponse = null;
-  let finalContentType = "image/jpeg";
+  let imgResult = null;
 
   for (const imgUrl of imageUrls) {
-    imgResponse = await fetchImage(imgUrl);
-    if (imgResponse) {
-      finalContentType = imgResponse.headers.get("content-type") || "image/jpeg";
-      break; 
-    }
+    imgResult = await fetchImage(imgUrl);
+    if (imgResult) break;
   }
 
-  if (!imgResponse) {
+  if (!imgResult) {
     context.waitUntil(notify(env, {
       title: "Fetch Error (502)",
       message: `All sources failed for: ${query}`,
@@ -93,7 +89,7 @@ export async function onRequest(context) {
     return jsonResponse(502, { error: "Failed to fetch image from all available sources" });
   }
 
-  const imgBuffer = await imgResponse.arrayBuffer();
+  const { buffer: imgBuffer, contentType: finalContentType } = imgResult;
 
   // 5. Store in R2
   await env.R2_IMAGES.put(r2Key, imgBuffer, {
@@ -122,10 +118,10 @@ export async function onRequest(context) {
  */
 async function notify(env, { title, message, tags, priority }) {
   if (!env.NTFY_URL) return;
-  
+
   // Ensure protocol is present as requested by Meowster
   const endpoint = env.NTFY_URL.startsWith("http") ? env.NTFY_URL : `https://${env.NTFY_URL}`;
-  
+
   try {
     await fetch(endpoint, {
       method: "POST",
@@ -180,7 +176,7 @@ async function braveImageSearch(query, apiKey) {
 async function fetchImage(imageUrl) {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout per image
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
 
     const res = await fetch(imageUrl, {
       headers: {
@@ -192,18 +188,32 @@ async function fetchImage(imageUrl) {
       cf: { cacheTtl: 0 },
     });
 
-    clearTimeout(timeoutId);
-
-    if (!res.ok) return null;
+    if (!res.ok) {
+      clearTimeout(timeoutId);
+      return null;
+    }
 
     const ct = res.headers.get("content-type") || "";
-    if (!ct.startsWith("image/")) return null;
+    if (!ct.startsWith("image/")) {
+      clearTimeout(timeoutId);
+      return null;
+    }
 
     // Check for massive files that might crash the worker (> 10MB)
     const size = res.headers.get("content-length");
-    if (size && parseInt(size) > 10485760) return null;
+    if (size && parseInt(size) > 10485760) {
+      clearTimeout(timeoutId);
+      return null;
+    }
 
-    return res;
+    // Consume body inside timeout scope so abort covers the full download
+    const buffer = await res.arrayBuffer();
+    clearTimeout(timeoutId);
+
+    // Final size check for chunked responses without content-length
+    if (buffer.byteLength > 10485760) return null;
+
+    return { buffer, contentType: ct };
   } catch {
     return null;
   }
