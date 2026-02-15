@@ -181,7 +181,7 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 
 Each new search writes a unique key to avoid race conditions with concurrent requests:
 
-**Key:** `<ip>:<YYYY-MM-DD>:<timestamp>-<uuid>` → **Value:** `"1"` — **TTL:** 48 hours
+**Key:** `<ip>:<YYYY-MM-DD>:<timestamp>-<uuid>` → **Value:** `"1"` — **TTL:** 25 hours
 
 To check usage, `list({ prefix: "<ip>:<YYYY-MM-DD>:" })` counts the keys. No read-modify-write, no race condition.
 
