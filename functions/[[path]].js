@@ -36,13 +36,13 @@ export async function onRequest(context) {
     }
   }
 
-  // 2. Cache miss — check rate limit
+  // 2. Cache miss — check rate limit via KV list
   const ip = request.headers.get("cf-connecting-ip") || "unknown";
   const today = new Date().toISOString().slice(0, 10);
-  const rateKey = `${ip}:${today}`;
+  const ratePrefix = `${ip}:${today}:`;
 
-  const rateData = await env.DIRECT_IMG_RATE.get(rateKey, "json");
-  const count = rateData?.c || 0;
+  const rateList = await env.DIRECT_IMG_RATE.list({ prefix: ratePrefix });
+  const count = rateList.keys.length;
 
   if (count >= 25) {
     context.waitUntil(notify(env, {
@@ -51,10 +51,15 @@ export async function onRequest(context) {
       tags: "warning,no_entry",
       priority: 2
     }));
-    // Serve the limit meme image instead of JSON
     const limitReq = new Request(new URL("/limit.webp", url.origin));
     return env.ASSETS.fetch(limitReq);
   }
+
+  // Write a unique rate key BEFORE doing the search (claim the slot)
+  const rateEntryKey = `${ratePrefix}${Date.now()}-${crypto.randomUUID()}`;
+  await env.DIRECT_IMG_RATE.put(rateEntryKey, "1", {
+    expirationTtl: 48 * 60 * 60,
+  });
 
   // Notify of a new search (Cache Miss)
   context.waitUntil(notify(env, {
@@ -111,11 +116,6 @@ export async function onRequest(context) {
     expirationTtl: TTL_SECONDS,
   });
 
-  // 7. Increment rate limit
-  await env.DIRECT_IMG_RATE.put(rateKey, JSON.stringify({ c: count + 1 }), {
-    expirationTtl: 48 * 60 * 60,
-  });
-
   return new Response(imgBuffer, {
     headers: imageHeaders(finalContentType, TTL_SECONDS * 1000),
   });
@@ -127,7 +127,6 @@ export async function onRequest(context) {
 async function notify(env, { title, message, tags, priority }) {
   if (!env.NTFY_URL) return;
 
-  // Ensure protocol is present as requested by Meowster
   const endpoint = env.NTFY_URL.startsWith("http") ? env.NTFY_URL : `https://${env.NTFY_URL}`;
 
   try {
@@ -151,9 +150,9 @@ function normalizeQuery(path) {
     return decoded
       .toLowerCase()
       .trim()
-      .replace(/[\x00-\x1f]/g, "")  // Strip null bytes and control chars
-      .replace(/\/+$/, "")            // Strip trailing slashes
-      .replace(/\s+/g, " ");          // Collapse multiple spaces
+      .replace(/[\x00-\x1f]/g, "")
+      .replace(/\/+$/, "")
+      .replace(/\s+/g, " ");
   } catch {
     return path
       .toLowerCase()
@@ -185,7 +184,6 @@ async function braveImageSearch(query, apiKey) {
   const results = data.results;
   if (!results?.length) return null;
 
-  // Return all valid URLs to try them sequentially
   return results
     .map(r => r.properties?.url || r.thumbnail?.src)
     .filter(url => !!url);
@@ -208,13 +206,11 @@ async function fetchImage(imageUrl, timeoutMs = 5000) {
     const ct = res.headers.get("content-type") || "";
     if (!ct.startsWith("image/")) return null;
 
-    // Check for massive files that might crash the worker (> 10MB)
     const size = res.headers.get("content-length");
     if (size && parseInt(size) > 10485760) return null;
 
     const buffer = await res.arrayBuffer();
 
-    // Final size check for chunked responses without content-length
     if (buffer.byteLength > 10485760) return null;
 
     return { buffer, contentType: ct };
