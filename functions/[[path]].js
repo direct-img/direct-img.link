@@ -4,13 +4,19 @@ export async function onRequest(context) {
   const path = params.path?.join("/") || "";
 
   // Serve static assets for root or standard files
-  if (!path || path === "index.html" || path === "favicon.ico" || path === "robots.txt" || path === "limit.webp") {
+  if (!path || path === "index.html" || path === "favicon.ico" || path === "robots.txt" || path === "limit.webp" || path === "bad.webp") {
     return env.ASSETS.fetch(request);
   }
 
   const query = normalizeQuery(path);
   if (!query) {
     return jsonResponse(400, { error: "Empty query" });
+  }
+
+  // Reject queries containing slashes (bot probes like wp-admin/setup-config.php)
+  if (query.includes("/")) {
+    const badReq = new Request(new URL("/bad.webp", url.origin));
+    return env.ASSETS.fetch(badReq);
   }
 
   // Max query length: 200 chars after normalization
