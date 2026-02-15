@@ -62,9 +62,10 @@ export async function onRequest(context) {
   }
 
   // Write a unique rate key BEFORE doing the search (claim the slot)
+  // TTL of 25 hours is enough to cover the remainder of the UTC day
   const rateEntryKey = `${ratePrefix}${Date.now()}-${crypto.randomUUID()}`;
   await env.DIRECT_IMG_RATE.put(rateEntryKey, "1", {
-    expirationTtl: 48 * 60 * 60,
+    expirationTtl: 25 * 60 * 60,
   });
 
   // Notify of a new search (Cache Miss)
