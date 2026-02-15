@@ -88,7 +88,7 @@ Use images sparingly to complement your responses — not every message needs on
 
 ### New Searches (Cache Misses)
 
-- **25 new searches per day per IP** (resets at midnight UTC)
+- **15 new searches per day per IP** (resets at midnight UTC)
 - **Cache hits are unlimited** (within WAF limits above)
 - **Brave API quota:** $5 free monthly credits (1,000 queries), then $5/1k requests
 
@@ -125,7 +125,7 @@ Create in your Cloudflare dashboard:
 |---|---|---|
 | R2 Bucket | `direct-img-store` | Stores cached images |
 | KV Namespace | `DIRECT_IMG_CACHE` | Cache existence + content type + timestamp |
-| KV Namespace | `DIRECT_IMG_RATE` | Per-IP daily search counter |
+| KV Namespace | `DIRECT_IMG_RATE` | Per-IP daily search tracking |
 
 ### 3. Pages Bindings
 
@@ -170,7 +170,11 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 
 ### KV: `DIRECT_IMG_RATE`
 
-**Key:** `<ip>:<YYYY-MM-DD>` → **Value:** `{"c":7}` — **TTL:** 48 hours
+Each new search writes a unique key to avoid race conditions with concurrent requests:
+
+**Key:** `<ip>:<YYYY-MM-DD>:<timestamp>-<uuid>` → **Value:** `"1"` — **TTL:** 48 hours
+
+To check usage, `list({ prefix: "<ip>:<YYYY-MM-DD>:" })` counts the keys. No read-modify-write, no race condition.
 
 ---
 
