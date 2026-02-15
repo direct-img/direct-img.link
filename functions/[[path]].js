@@ -44,7 +44,7 @@ export async function onRequest(context) {
   const rateList = await env.DIRECT_IMG_RATE.list({ prefix: ratePrefix });
   const count = rateList.keys.length;
 
-  if (count >= 25) {
+  if (count >= 15) {
     context.waitUntil(notify(env, {
       title: "Rate Limit Hit",
       message: `IP ${ip} reached limit for: ${query}`,
