@@ -44,22 +44,24 @@ All queries are normalized before caching and searching:
 | Multiple spaces collapsed | `orange++cat` | `orange cat` |
 | Trailing slashes stripped | `orange+cat/` | `orange cat` |
 | Control characters removed | `orange\x00cat` | `orangecat` |
-| **Slashes rejected** | `wp-admin/setup.php` | `bad.webp` served |
+| **Slashes & Dots rejected** | `info.php`, `wp-admin/` | `bad.webp` served |
 | **Max length: 200 characters** | — | 400 error if exceeded |
 
 ### Characters that work fine
 
 - **Letters, numbers, spaces** — standard queries
-- **Hyphens** (`spider-man`), **dots** (`node.js`), **apostrophes** (`90's`) — passed through
+- **Hyphens** (`spider-man`), **apostrophes** (`90's`) — passed through
 - **Unicode** (`café`, `日本`) — supported via URL encoding
 
-### Slashes must be encoded
+### Slashes and Dots must be encoded
 
-Literal slashes (`/`) in the URL path are **rejected** to prevent bot abuse (e.g. `wp-admin/setup-config.php` probes). If your query genuinely contains a slash, encode it as `%2F`:
+Literal slashes (`/`) and dots (`.`) in the URL path are **rejected** to prevent bot abuse (e.g. `info.php` or `wp-admin/` probes). If your query genuinely contains these characters, you must encode them:
 
 | Query | URL |
 |---|---|
 | AC/DC | `/AC%2FDC` ✅ |
+| node.js | `/node%2Ejs` ✅ |
+| info.php | `/info.php` ❌ (rejected) |
 | AC/DC | `/AC/DC` ❌ (rejected) |
 
 ### Things to know
