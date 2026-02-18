@@ -8,15 +8,17 @@ export async function onRequest(context) {
     return env.ASSETS.fetch(request);
   }
 
+  // Reject literal dots and slashes (bot probes like info.php or wp-admin/setup-config.php)
+  // We check the raw pathname (excluding leading slash and trailing slashes) to allow encoded dots (%2E) and slashes (%2F)
+  const rawQueryPart = url.pathname.slice(1).replace(/\/+$/, "");
+  if (rawQueryPart.includes(".") || rawQueryPart.includes("/")) {
+    const badReq = new Request(new URL("/bad.webp", url.origin));
+    return env.ASSETS.fetch(badReq);
+  }
+
   const query = normalizeQuery(path);
   if (!query) {
     return jsonResponse(400, { error: "Empty query" });
-  }
-
-  // Reject queries containing slashes (bot probes like wp-admin/setup-config.php)
-  if (query.includes("/")) {
-    const badReq = new Request(new URL("/bad.webp", url.origin));
-    return env.ASSETS.fetch(badReq);
   }
 
   // Max query length: 200 chars after normalization
