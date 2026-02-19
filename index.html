@@ -1,233 +1,74 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
     <title>direct-img.link | Live images in markdown</title>
     <meta name="description" content="Embed live images in markdown powered by search. No APIs, no tokens, just search.">
     <style>
-        :root {
-            --bg: #ffffff;
-            --text: #1a1a1a;
-            --text-muted: #666666;
-            --accent: #0070f3;
-            --warning: #eb5757;
-            --code-bg: #f5f5f5;
-            --border: #eaeaea;
-            --radius: 8px;
-        }
-
-        * { box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            line-height: 1.6;
-            color: var(--text);
-            background-color: var(--bg);
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        main {
-            max-width: 680px;
-            width: 100%;
-            padding: 80px 24px;
-        }
-
-        h1 {
-            font-size: 2.5rem;
-            font-weight: 800;
-            letter-spacing: -0.02em;
-            margin-bottom: 8px;
-        }
-
-        p.tagline {
-            font-size: 1.25rem;
-            color: var(--text-muted);
-            margin-bottom: 32px;
-        }
-
-        .status-notice {
-            padding: 20px;
-            background: #fff5f5;
-            border: 1px solid #ffe0e0;
-            border-radius: var(--radius);
-            margin-bottom: 48px;
-        }
-
-        .status-notice p {
-            margin: 0;
-            font-size: 1rem;
-        }
-
-        .status-notice strong {
-            color: var(--warning);
-        }
-
-        .btc-address {
-            font-family: monospace;
-            background: rgba(0,0,0,0.05);
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.85rem;
-            word-break: break-all;
-            display: inline-block;
-            margin-top: 12px;
-        }
-
-        section {
-            margin-bottom: 48px;
-        }
-
-        h2 {
-            font-size: 1.5rem;
-            font-weight: 700;
-            margin-bottom: 16px;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 8px;
-        }
-
-        pre {
-            background: var(--code-bg);
-            padding: 16px;
-            border-radius: var(--radius);
-            overflow-x: auto;
-            font-size: 0.9rem;
-            border: 1px solid var(--border);
-        }
-
-        code {
-            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 16px 0;
-            font-size: 0.9rem;
-        }
-
-        th, td {
-            text-align: left;
-            padding: 12px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        th {
-            color: var(--text-muted);
-            font-weight: 600;
-        }
-
-        .card {
-            border: 1px solid var(--border);
-            padding: 16px;
-            border-radius: var(--radius);
-        }
-
-        .card h3 {
-            margin: 0 0 8px 0;
-            font-size: 1rem;
-        }
-
-        .card p {
-            margin: 0;
-            font-size: 0.9rem;
-            color: var(--text-muted);
-        }
-
-        footer {
-            width: 100%;
-            max-width: 680px;
-            padding: 40px 24px;
-            border-top: 1px solid var(--border);
-            color: var(--text-muted);
-            font-size: 0.9rem;
-            display: flex;
-            justify-content: space-between;
-            margin-top: auto;
-        }
-
-        a {
-            color: var(--accent);
-            text-decoration: none;
-        }
-
-        a:hover {
-            text-decoration: underline;
-        }
-
-        @media (max-width: 600px) {
-            h1 { font-size: 2rem; }
-        }
+        :root{--bg:#fff;--text:#1a1a1a;--text-muted:#666;--accent:#0070f3;--warning:#eb5757;--code-bg:#f5f5f5;--border:#eaeaea;--radius:8px;}
+        *{box-sizing:border-box;}
+        body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;line-height:1.6;color:var(--text);background-color:var(--bg);margin:0;display:flex;flex-direction:column;align-items:center;}
+        main{max-width:680px;width:100%;padding:80px 24px;}
+        h1{font-size:2.5rem;font-weight:800;letter-spacing:-0.02em;margin-bottom:8px;}
+        p.tagline{font-size:1.25rem;color:var(--text-muted);margin-bottom:32px;}
+        .status-notice{padding:20px;background:#fff5f5;border:1px solid #ffe0e0;border-radius:var(--radius);margin-bottom:48px;}
+        .status-notice p{margin:0;font-size:1rem;}
+        .status-notice strong{color:var(--warning);}
+        .btc-address{font-family:monospace;background:rgba(0,0,0,0.05);padding:4px 8px;border-radius:4px;font-size:0.85rem;word-break:break-all;display:inline-block;margin-top:12px;}
+        section{margin-bottom:48px;}
+        h2{font-size:1.5rem;font-weight:700;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:8px;}
+        pre{background:var(--code-bg);padding:16px;border-radius:var(--radius);overflow-x:auto;font-size:0.9rem;border:1px solid var(--border);}
+        code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;}
+        table{width:100%;border-collapse:collapse;margin:16px 0;font-size:0.9rem;}
+        th,td{text-align:left;padding:12px;border-bottom:1px solid var(--border);}
+        th{color:var(--text-muted);font-weight:600;}
+        .card{border:1px solid var(--border);padding:16px;border-radius:var(--radius);}
+        .card h3{margin:0 0 8px 0;font-size:1rem;}
+        .card p{margin:0;font-size:0.9rem;color:var(--text-muted);}
+        footer{width:100%;max-width:680px;padding:40px 24px;border-top:1px solid var(--border);color:var(--text-muted);font-size:0.9rem;display:flex;justify-content:space-between;margin-top:auto;}
+        a{color:var(--accent);text-decoration:none;} a:hover{text-decoration:underline;}
+        @media(max-width:600px){h1{font-size:2rem;}}
     </style>
 </head>
 <body>
-
     <main>
         <h1>direct-img.link</h1>
         <p class="tagline">Live images in markdown, powered by search.</p>
 
         <section class="status-notice">
-            <p>
-                This service is <strong>free</strong> to use. However, search API and server costs are high.
-                Without community donations, <strong>this project will die quickly.</strong>
-            </p>
-            <p style="margin-top: 10px;">
-                If we receive significant donations, we will <strong>increase the daily search limits</strong> for everyone.
-            </p>
+            <p>This service is <strong>free</strong> to use. However, search API and server costs are high. Without community donations, <strong>this project will die quickly.</strong></p>
+            <p style="margin-top:10px;">If we receive significant donations, we will <strong>increase the daily search limits</strong> for everyone.</p>
             <div class="btc-address">BTC: bc1qkqdmhk0we49qn74ua9752ysfxzd7uxqettymhv</div>
         </section>
 
         <section>
             <h2>For AI System Prompts</h2>
             <p>Add this to your system instructions:</p>
-            <pre><code>When writing markdown, you can embed relevant images using direct-img.link — a free image search proxy that returns images directly from a URL.
-
-Format:
-![alt text](https://direct-img.link/&lt;search+query&gt;)
-
-Examples:
-![orange cat](https://direct-img.link/orange+cat)
-![US president](https://direct-img.link/u.s.+president)
-![90's fashion](https://direct-img.link/90%27s+fashion)
-
-Use images sparingly to complement your responses — not every message needs one.</code></pre>
+            <pre><code>When writing markdown, embed relevant images using direct-img.link — a free image search proxy that returns images directly from a URL. But keep it entertaining, for example use it to show reaction faces, anime girl, or fun, not technical.
+Example structure:
+![Happy Girl](https://direct-img.link/happy+girl)
+Use images to complement your responses, powered by Brave.</code></pre>
         </section>
 
         <section>
             <h2>Usage</h2>
             <p>Embed directly in your markdown files:</p>
             <pre><code>![orange cat](https://direct-img.link/orange+cat)</code></pre>
-            <p style="font-size: 0.85rem; margin-top: 12px; color: var(--text-muted);">
-                * Note: Literal dots (.) and slashes (/) are rejected to prevent bot abuse. Use <code>%2E</code> or <code>%2F</code> if your query requires them.
-            </p>
+            <p style="font-size:0.85rem;margin-top:12px;color:var(--text-muted);">* Note: Literal dots (.) and slashes (/) are rejected to prevent bot abuse. Use <code>%2E</code> or <code>%2F</code> if your query requires them.</p>
         </section>
 
         <section>
             <h2>Rate Limits</h2>
             <table>
                 <thead>
-                    <tr>
-                        <th>Scope</th>
-                        <th>Limit</th>
-                        <th>Action</th>
-                    </tr>
+                    <tr><th>Scope</th><th>Limit</th><th>Action</th></tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td>Global Traffic</td>
-                        <td>10 req/10s per IP</td>
-                        <td>Block (10s)</td>
-                    </tr>
-                    <tr>
-                        <td>New Searches</td>
-                        <td>15 per day per IP</td>
-                        <td>Cache only</td>
-                    </tr>
+                    <tr><td>Global Traffic</td><td>10 req/10s per IP</td><td>Block (10s)</td></tr>
+                    <tr><td>New Searches</td><td>15 per day per IP</td><td>Cache only</td></tr>
                 </tbody>
             </table>
-            <p style="font-size: 0.85rem; color: var(--text-muted);">* Cache hits are unlimited within global traffic limits.</p>
+            <p style="font-size:0.85rem;color:var(--text-muted);">* Cache hits are unlimited within global traffic limits.</p>
         </section>
 
         <section>
@@ -240,10 +81,7 @@ Use images sparingly to complement your responses — not every message needs on
 
     <footer>
         <div>Built for the AI era.</div>
-        <div>
-            <a href="https://github.com/direct-img/direct-img.link">GitHub</a>
-        </div>
+        <div><a href="https://github.com/direct-img/direct-img.link">GitHub</a></div>
     </footer>
-
 </body>
 </html>
