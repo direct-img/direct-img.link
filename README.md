@@ -108,6 +108,9 @@ Free community service. Donations help cover API and infrastructure costs.
 
 **BTC:** `bc1qkqdmhk0we49qn74ua9752ysfxzd7uxqettymhv`
 
+
+**XMR:**
+`84gpfhmiumNZswsaNA9NtGYdJKboK79HL9U8SbApmvKg4uyAW9wa7geJsZVmN4ktrYQkG7tNFEmpRTgByhywPdMFJuVWgrr`
 ---
 
 ## Self-Hosting
