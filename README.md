@@ -111,6 +111,7 @@ Free community service. Donations help cover API and infrastructure costs.
 
 **XMR:**
 `84gpfhmiumNZswsaNA9NtGYdJKboK79HL9U8SbApmvKg4uyAW9wa7geJsZVmN4ktrYQkG7tNFEmpRTgByhywPdMFJuVWgrr`
+
 ---
 
 ## Self-Hosting
