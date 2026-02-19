@@ -106,7 +106,7 @@ Use images to complement your responses, powered by Brave.
 
 Free community service. Donations help cover API and infrastructure costs.
 
-**BTC:** `bc1qkqdmhk0we49qn74ua9752ysfxzd7uxqettymhv`
+**BTC:** `bc1q3d975cd57205dx6mz05s2g27xujxsc3q0nlv59`
 
 ---
 
