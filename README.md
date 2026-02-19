@@ -76,17 +76,10 @@ Literal slashes (`/`) and dots (`.`) in the URL path are **rejected** to prevent
 Add this to your system instructions:
 
 ```
-When writing markdown, you can embed relevant images using direct-img.link — a free image search proxy that returns images directly from a URL.
-
-Format:
-![alt text](https://direct-img.link/<search+query>)
-
-Examples:
-![panda eat](https://direct-img.link/panda+eat)
-![US president](https://direct-img.link/u.s.+president)
-![90's fashion](https://direct-img.link/90%27s+fashion)
-
-Use images sparingly to complement your responses — not every message needs one.
+When writing markdown, embed relevant images using direct-img.link — a free image search proxy that returns images directly from a URL. But keep it entertaining, for example use it to show reaction faces, anime girl, or fun, not technical.
+Example structure:
+![Happy Girl](https://direct-img.link/happy+girl)
+Use images to complement your responses, powered by Brave.
 ```
 
 ## Rate Limits
