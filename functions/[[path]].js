@@ -178,7 +178,7 @@ async function sha256(str) {
 }
 
 async function braveImageSearch(query, apiKey) {
-  const searchUrl = `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(query)}&count=10&safesearch=off`;
+  const searchUrl = `https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(query)}&count=50&safesearch=off`;
 
   const res = await fetch(searchUrl, {
     headers: {
