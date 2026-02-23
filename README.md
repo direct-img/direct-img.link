@@ -129,7 +129,6 @@ Create in your Cloudflare dashboard:
 |---|---|---|
 | R2 Bucket | `direct-img-store` | Stores cached images |
 | KV Namespace | `DIRECT_IMG_CACHE` | Cache existence + content type + timestamp |
-| KV Namespace | `DIRECT_IMG_RATE` | Per-IP daily search tracking |
 
 ### 3. Pages Bindings
 
@@ -139,7 +138,6 @@ Create in your Cloudflare dashboard:
 |---|---|---|
 | R2 Bucket | `R2_IMAGES` | `direct-img-store` |
 | KV Namespace | `DIRECT_IMG_CACHE` | `DIRECT_IMG_CACHE` |
-| KV Namespace | `DIRECT_IMG_RATE` | `DIRECT_IMG_RATE` |
 
 ### 4. Secrets
 
@@ -148,7 +146,10 @@ Create in your Cloudflare dashboard:
 | Variable | Description | Required |
 |---|---|---|
 | `BRAVE_API_KEY` | Brave Search API key | Yes |
-| `NTFY_URL` | ntfy.sh topic URL for traffic/error alerts | Optional |
+| `SURREAL_URL` | SurrealDB URL (e.g. `https://db.site.com`) | Yes |
+| `SURREAL_USER` | SurrealDB username | Yes |
+| `SURREAL_PASS` | SurrealDB password | Yes |
+| `NTFY_URL` | ntfy.sh topic URL for alerts | Optional |
 
 ### 5. WAF Rules
 
@@ -172,13 +173,9 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 
 **Key:** normalized query (lowercase, trimmed, max 200 chars) → **Value:** `{"t":1719000000,"ct":"image/jpeg"}` — **TTL:** 30 days
 
-### KV: `DIRECT_IMG_RATE`
+### Database: `SurrealDB` (Rate Limiting)
 
-Each new search writes a unique key to avoid race conditions with concurrent requests:
-
-**Key:** `<ip>:<YYYY-MM-DD>:<timestamp>-<uuid>` → **Value:** `"1"` — **TTL:** 25 hours
-
-To check usage, `list({ prefix: "<ip>:<YYYY-MM-DD>:" })` counts the keys. No read-modify-write, no race condition.
+Using atomic database transactions over HTTP to track per-IP/per-day search frequencies securely and rapidly.
 
 ---
 
@@ -186,10 +183,12 @@ To check usage, `list({ prefix: "<ip>:<YYYY-MM-DD>:" })` counts the keys. No rea
 
 - **Cloudflare Pages** — hosting + edge functions
 - **Cloudflare R2** — image storage
-- **Cloudflare KV** — cache + rate limiting
-- **Cloudflare WAF** — rate limiting + DDoS protection
+- **Cloudflare KV** — generic lookups
+- **SurrealDB** — atomic rate limiting
+- **Cloudflare WAF** — layer 7 mitigation
 - **Brave Image Search API** — image sourcing
 
 ---
 
 **direct-img.link** — because `![](https://direct-img.link/thing)` should just work.
+
