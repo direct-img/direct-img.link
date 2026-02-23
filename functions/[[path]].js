@@ -21,6 +21,7 @@ export async function onRequest(context) {
 
   const cached = await env.DIRECT_IMG_CACHE.get(cacheKey, "json");
   if (cached) {
+    if (cached.err) return env.ASSETS.fetch(new Request(new URL("/bad.webp", url.origin)));
     const obj = await env.R2_IMAGES.get(r2Key);
     if (obj) {
       const nowSec = Math.floor(Date.now() / 1000);
@@ -36,7 +37,6 @@ export async function onRequest(context) {
 
   if (env.SURREAL_URL && env.SURREAL_USER && env.SURREAL_PASS) {
     const auth = btoa(`${env.SURREAL_USER}:${env.SURREAL_PASS}`);
-    // Atomic upsert + increment, while recording the timestamp
     const sql = `UPDATE rate:\`${rateId}\` SET count += 1, updated_at = time::now() RETURN count;`;
     
     try {
@@ -51,7 +51,6 @@ export async function onRequest(context) {
         if (data[0]?.status === "OK" && data[0]?.result?.length > 0) count = data[0].result[0].count;
       }
 
-      // Background cleanup: ~5% chance to sweep records older than 25h asynchronously
       if (Math.random() < 0.05) {
         context.waitUntil(
           fetch(`${env.SURREAL_URL}/sql`, {
@@ -73,11 +72,14 @@ export async function onRequest(context) {
 
   context.waitUntil(notify(env, { title: "New Search", message: `Query: ${query} (Search #${count} for ${ip})\n${url.origin}/${path}`, tags: "mag", priority: 3 }));
 
+  const fail = async (t, m, tag, p) => {
+    context.waitUntil(notify(env, { title: t, message: m, tags: tag, priority: p }));
+    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), err: true }), { expirationTtl: 86400 });
+    return env.ASSETS.fetch(new Request(new URL("/bad.webp", url.origin)));
+  };
+
   const imageUrls = await braveImageSearch(query, env.BRAVE_API_KEY);
-  if (!imageUrls || imageUrls.length === 0) {
-    context.waitUntil(notify(env, { title: "Search Failed", message: `No results for: ${query}`, tags: "question", priority: 3 }));
-    return jsonResponse(404, { error: "No image found for query" });
-  }
+  if (!imageUrls || imageUrls.length === 0) return await fail("Search Failed", `No results for: ${query}`, "question", 3);
 
   const GLOBAL_DEADLINE = Date.now() + 20000;
   let imgResult = null;
@@ -89,10 +91,7 @@ export async function onRequest(context) {
     if (imgResult) break;
   }
 
-  if (!imgResult) {
-    context.waitUntil(notify(env, { title: "Fetch Error (502)", message: `All sources failed for: ${query}`, tags: "boom,x", priority: 4 }));
-    return jsonResponse(502, { error: "Failed to fetch image from all available sources" });
-  }
+  if (!imgResult) return await fail("Fetch Error (502)", `All sources failed for: ${query}`, "boom,x", 4);
 
   const { buffer: imgBuffer, contentType: finalContentType } = imgResult;
   await env.R2_IMAGES.put(r2Key, imgBuffer, { httpMetadata: { contentType: finalContentType } });
