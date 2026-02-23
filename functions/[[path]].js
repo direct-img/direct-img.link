@@ -37,32 +37,95 @@ export async function onRequest(context) {
 
   if (env.SURREAL_URL && env.SURREAL_USER && env.SURREAL_PASS) {
     const auth = btoa(`${env.SURREAL_USER}:${env.SURREAL_PASS}`);
-    const sql = `UPDATE rate:\`${rateId}\` SET count += 1, updated_at = time::now() RETURN count;`;
-    
+    const surrealHeaders = {
+      "Accept": "application/json",
+      "Authorization": `Basic ${auth}`,
+      "surreal-ns": "direct_img",
+      "surreal-db": "rate_limit",
+    };
+
+    // First ensure namespace and database exist
+    try {
+      const initSql = `DEFINE NAMESPACE IF NOT EXISTS direct_img; USE NS direct_img; DEFINE DATABASE IF NOT EXISTS rate_limit;`;
+      await fetch(`${env.SURREAL_URL}/sql`, {
+        method: "POST",
+        headers: { ...surrealHeaders, "surreal-ns": "direct_img", "surreal-db": "rate_limit" },
+        body: initSql
+      });
+    } catch (err) {
+      context.waitUntil(notify(env, {
+        title: "SurrealDB Init Error",
+        message: `Failed to init NS/DB: ${err.message}`,
+        tags: "warning",
+        priority: 4
+      }));
+    }
+
+    const sql = `UPSERT rate:\`${rateId}\` SET count = IF count IS NONE THEN 1 ELSE count + 1 END, updated_at = time::now() RETURN count;`;
+
     try {
       const dbRes = await fetch(`${env.SURREAL_URL}/sql`, {
         method: "POST",
-        headers: { "Accept": "application/json", "Authorization": `Basic ${auth}`, "NS": "direct_img", "DB": "rate_limit" },
+        headers: surrealHeaders,
         body: sql
       });
 
-      if (dbRes.ok) {
-        const data = await dbRes.json();
-        if (data[0]?.status === "OK" && data[0]?.result?.length > 0) count = data[0].result[0].count;
+      const rawText = await dbRes.text();
+
+      if (!dbRes.ok) {
+        context.waitUntil(notify(env, {
+          title: "SurrealDB HTTP Error",
+          message: `Status: ${dbRes.status}\nBody: ${rawText.slice(0, 500)}`,
+          tags: "warning,x",
+          priority: 4
+        }));
+      } else {
+        try {
+          const data = JSON.parse(rawText);
+          if (data[0]?.status === "OK" && data[0]?.result?.length > 0) {
+            count = data[0].result[0].count;
+          } else {
+            context.waitUntil(notify(env, {
+              title: "SurrealDB Unexpected Result",
+              message: `Response: ${rawText.slice(0, 500)}`,
+              tags: "warning",
+              priority: 3
+            }));
+          }
+        } catch (parseErr) {
+          context.waitUntil(notify(env, {
+            title: "SurrealDB Parse Error",
+            message: `Parse error: ${parseErr.message}\nRaw: ${rawText.slice(0, 500)}`,
+            tags: "warning",
+            priority: 4
+          }));
+        }
       }
 
       if (Math.random() < 0.05) {
         context.waitUntil(
           fetch(`${env.SURREAL_URL}/sql`, {
             method: "POST",
-            headers: { "Accept": "application/json", "Authorization": `Basic ${auth}`, "NS": "direct_img", "DB": "rate_limit" },
+            headers: surrealHeaders,
             body: `DELETE rate WHERE updated_at < time::now() - 25h;`
           }).catch(() => {})
         );
       }
     } catch (err) {
-      console.error("SurrealDB fetch failed:", err);
+      context.waitUntil(notify(env, {
+        title: "SurrealDB Fetch Failed",
+        message: `Error: ${err.message}\nURL: ${env.SURREAL_URL}`,
+        tags: "boom,x",
+        priority: 4
+      }));
     }
+  } else {
+    context.waitUntil(notify(env, {
+      title: "SurrealDB Not Configured",
+      message: `Missing: ${!env.SURREAL_URL ? 'SURREAL_URL ' : ''}${!env.SURREAL_USER ? 'SURREAL_USER ' : ''}${!env.SURREAL_PASS ? 'SURREAL_PASS' : ''}`,
+      tags: "warning",
+      priority: 4
+    }));
   }
 
   if (count > 15) {
@@ -95,8 +158,8 @@ export async function onRequest(context) {
 
   const { buffer: imgBuffer, contentType: finalContentType } = imgResult;
   await env.R2_IMAGES.put(r2Key, imgBuffer, { httpMetadata: { contentType: finalContentType } });
-  
-  const TTL_SECONDS = 2592000; // 30 days
+
+  const TTL_SECONDS = 2592000;
   await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: finalContentType }), { expirationTtl: TTL_SECONDS });
 
   return new Response(imgBuffer, { headers: imageHeaders(finalContentType, TTL_SECONDS * 1000) });
