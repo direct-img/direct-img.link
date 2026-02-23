@@ -175,7 +175,9 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 
 ### Database: `SurrealDB` (Rate Limiting)
 
-Using atomic database transactions over HTTP to track per-IP/per-day search frequencies securely and rapidly.
+Using atomic database transactions over HTTP to track per-IP/per-day search frequencies securely and rapidly. 
+
+**Note:** This implementation is tested and verified for **SurrealDB v2.3.10**.
 
 ---
 
@@ -184,11 +186,10 @@ Using atomic database transactions over HTTP to track per-IP/per-day search freq
 - **Cloudflare Pages** — hosting + edge functions
 - **Cloudflare R2** — image storage
 - **Cloudflare KV** — generic lookups
-- **SurrealDB** — atomic rate limiting
+- **SurrealDB (v2.3.10)** — atomic rate limiting
 - **Cloudflare WAF** — layer 7 mitigation
 - **Brave Image Search API** — image sourcing
 
 ---
 
 **direct-img.link** — because `![](https://direct-img.link/thing)` should just work.
-
