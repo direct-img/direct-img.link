@@ -142,19 +142,36 @@ export async function onRequest(context) {
   };
 
   const imageUrls = await braveImageSearch(query, env.BRAVE_API_KEY);
-  if (!imageUrls || imageUrls.length === 0) return await fail("Search Failed", `No results for: ${query}`, "question", 3);
+  if (!imageUrls || imageUrls.length === 0) return await fail("Search Failed", `Brave API returned no results for: ${query}`, "question", 3);
 
   const GLOBAL_DEADLINE = Date.now() + 20000;
   let imgResult = null;
+  const failReasons = [];
 
   for (const imgUrl of imageUrls) {
     const remaining = GLOBAL_DEADLINE - Date.now();
-    if (remaining <= 500) break;
-    imgResult = await fetchImage(imgUrl, Math.min(remaining, 5000));
-    if (imgResult) break;
+    if (remaining <= 500) {
+      failReasons.push("Global timeout reached");
+      break;
+    }
+    const res = await fetchImage(imgUrl, Math.min(remaining, 5000));
+    if (res.success) {
+      imgResult = res;
+      break;
+    } else {
+      try {
+        const host = new URL(imgUrl).hostname.replace(/^www\./, '');
+        failReasons.push(`${host}=${res.reason}`);
+      } catch {
+        failReasons.push(`invalid_url=${res.reason}`);
+      }
+    }
   }
 
-  if (!imgResult) return await fail("Fetch Error (502)", `All sources failed for: ${query}`, "boom,x", 4);
+  if (!imgResult) {
+    const reasonStr = failReasons.slice(0, 6).join(", ") + (failReasons.length > 6 ? ", ..." : "");
+    return await fail("Fetch Error (502)", `All sources failed for: ${query}\nReasons: ${reasonStr}`, "boom,x", 4);
+  }
 
   const { buffer: imgBuffer, contentType: finalContentType } = imgResult;
   await env.R2_IMAGES.put(r2Key, imgBuffer, { httpMetadata: { contentType: finalContentType } });
@@ -201,13 +218,21 @@ async function fetchImage(imageUrl, timeoutMs = 5000) {
       headers: { "User-Agent": "Mozilla/5.0", "Accept": "image/avif,image/webp,image/*,*/*;q=0.8" },
       redirect: "follow", signal: AbortSignal.timeout(timeoutMs), cf: { cacheTtl: 0 }
     });
-    if (!res.ok || !res.headers.get("content-type")?.startsWith("image/")) return null;
+    if (!res.ok) return { success: false, reason: `HTTP ${res.status}` };
+    
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.startsWith("image/")) return { success: false, reason: `Bad CT: ${ct.split(';')[0]}` };
+    
     const size = res.headers.get("content-length");
-    if (size && parseInt(size) > 10485760) return null;
+    if (size && parseInt(size) > 10485760) return { success: false, reason: `Header >10MB` };
+    
     const buffer = await res.arrayBuffer();
-    if (buffer.byteLength > 10485760) return null;
-    return { buffer, contentType: res.headers.get("content-type") };
-  } catch { return null; }
+    if (buffer.byteLength > 10485760) return { success: false, reason: `Buffer >10MB` };
+    
+    return { success: true, buffer, contentType: ct };
+  } catch (err) { 
+    return { success: false, reason: err.name === 'TimeoutError' ? 'Timeout' : err.message }; 
+  }
 }
 
 function imageHeaders(contentType, maxAgeMs) {
