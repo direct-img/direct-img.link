@@ -1,3 +1,6 @@
+import { braveImageSearch } from "./_utils/brave.js";
+import { bingImageSearchFallback } from "./_utils/bing.js";
+
 export async function onRequest(context) {
   const { request, env, params } = context;
   const url = new URL(request.url);
@@ -206,45 +209,6 @@ function normalizeQuery(path) {
 async function sha256(str) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-async function braveImageSearch(query, apiKey) {
-  const res = await fetch(`https://api.search.brave.com/res/v1/images/search?q=${encodeURIComponent(query)}&count=50&safesearch=off`, {
-    headers: { "Accept": "application/json", "X-Subscription-Token": apiKey },
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.results?.map(r => r.properties?.url || r.thumbnail?.src).filter(url => !!url) || null;
-}
-
-async function bingImageSearchFallback(query) {
-  try {
-    const res = await fetch(`https://www.bing.com/images/search?q=${encodeURIComponent(query)}&safesearch=moderate`, {
-      headers: { 
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-      }
-    });
-    if (!res.ok) return null;
-    const html = await res.text();
-    const urls = [];
-    
-    // Bing encodes the image payload inside HTML entity attributes and script tags
-    const regex1 = /&quot;murl&quot;:&quot;(https:[^&"]+)&quot;/g;
-    const regex2 = /"murl":"(https:[^"]+)"/g;
-    
-    let match;
-    while ((match = regex1.exec(html)) !== null) {
-      urls.push(match[1].replace(/\\\//g, '/'));
-    }
-    while ((match = regex2.exec(html)) !== null) {
-      urls.push(match[1].replace(/\\\//g, '/'));
-    }
-    
-    return urls.length > 0 ? [...new Set(urls)] : null;
-  } catch (err) {
-    return null;
-  }
 }
 
 async function fetchImage(imageUrl, timeoutMs = 5000) {
