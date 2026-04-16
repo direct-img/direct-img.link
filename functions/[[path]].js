@@ -135,7 +135,7 @@ export async function onRequest(context) {
     return env.ASSETS.fetch(new Request(new URL("/limit.webp", url.origin)));
   }
 
-  context.waitUntil(notify(env, { title: "New Search", message: `Query: ${query} (Search #${count} for ${ip})\n${url.origin}/${path}`, tags: "mag", priority: 3 }));
+  context.waitUntil(notify(env, { title: "New Search", message: `Query: ${query} (Search #${count} for ${ip})\n${url.origin}/${path}`, tags: "mag", priority: 2 }));
 
   const fail = async (t, m, tag, p) => {
     context.waitUntil(notify(env, { title: t, message: m, tags: tag, priority: p }));
