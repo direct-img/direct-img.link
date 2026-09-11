@@ -1,6 +1,8 @@
 import { braveImageSearch } from "./_utils/brave.js";
 import { bingImageSearchFallback } from "./_utils/bing.js";
 
+const TTL_SECONDS = 90 * 24 * 60 * 60;
+
 export async function onRequest(context) {
   const { request, env, params } = context;
   const url = new URL(request.url);
@@ -28,7 +30,7 @@ export async function onRequest(context) {
     const obj = await env.R2_IMAGES.get(r2Key);
     if (obj) {
       const nowSec = Math.floor(Date.now() / 1000);
-      const remainingSec = Math.max(0, (cached.t + 5184000) - nowSec);
+      const remainingSec = Math.max(0, (cached.t + TTL_SECONDS) - nowSec);
       return new Response(obj.body, { headers: imageHeaders(cached.ct, remainingSec * 1000) });
     }
   }
@@ -184,7 +186,6 @@ export async function onRequest(context) {
   const { buffer: imgBuffer, contentType: finalContentType } = imgResult;
   await env.R2_IMAGES.put(r2Key, imgBuffer, { httpMetadata: { contentType: finalContentType } });
 
-  const TTL_SECONDS = 5184000;
   await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: finalContentType }), { expirationTtl: TTL_SECONDS });
 
   return new Response(imgBuffer, { headers: imageHeaders(finalContentType, TTL_SECONDS * 1000) });

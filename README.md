@@ -98,9 +98,10 @@ Use images to complement your responses, powered by Brave.
 
 ## Caching
 
-- Images are cached for **30 days**
+- Images are cached for **90 days**
 - After expiry, the next request triggers a fresh search
 - Images are stored in their original format as fetched from source
+- A matching R2 lifecycle rule deletes stored objects after 90 days
 
 ## Support
 
@@ -169,9 +170,11 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 
 **Key:** `<sha256-of-normalized-query>` — derived from query, no lookup needed. Stored with original content type from source.
 
+Add an object lifecycle rule in **R2 → direct-img-store → Settings** that applies to all prefixes and deletes uploaded objects after **90 days**. This removes expired objects even when their query is never requested again.
+
 ### KV: `DIRECT_IMG_CACHE`
 
-**Key:** normalized query (lowercase, trimmed, max 200 chars) → **Value:** `{"t":1719000000,"ct":"image/jpeg"}` — **TTL:** 30 days
+**Key:** normalized query (lowercase, trimmed, max 200 chars) → **Value:** `{"t":1719000000,"ct":"image/jpeg"}` — **TTL:** 90 days
 
 ### Database: `SurrealDB` (Rate Limiting)
 
