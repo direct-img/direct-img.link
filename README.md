@@ -88,12 +88,14 @@ Use images to complement your responses, powered by Brave.
 
 | Rule | Limit | Action |
 |---|---|---|
-| Rate Limit | 10 requests/10s per IP | Block for 10s |
+| Rate Limit | ~10 requests/10s per IP | HTTP 429 for ~10s |
 
 ### New Searches (Cache Misses)
 
-- **15 new searches per day per IP** (resets at midnight UTC)
+- **35 new searches per day per IP** (resets at midnight UTC), then `limit.webp` is served
 - **Cache hits are unlimited** (within WAF limits above)
+- Failed searches count toward the limit and are remembered for 24h (`bad.webp`)
+- WAF counters are approximate (not shared perfectly across Cloudflare servers), so bursts may slip slightly past 10
 - **Brave API quota:** $5 free monthly credits (1,000 queries), then $5/1k requests
 
 ## Caching
@@ -106,6 +108,8 @@ Use images to complement your responses, powered by Brave.
 ## Support
 
 Free community service. Donations help cover API and infrastructure costs.
+
+**GitHub Sponsors:** [github.com/sponsors/multipleof4](https://github.com/sponsors/multipleof4)
 
 **BTC:** `bc1q3d975cd57205dx6mz05s2g27xujxsc3q0nlv59`
 
