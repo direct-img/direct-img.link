@@ -132,7 +132,7 @@ export async function onRequest(context) {
     }));
   }
 
-  if (count > 35) {
+  if (count > 20) {
     context.waitUntil(notify(env, { title: "Rate Limit Hit", message: `IP ${ip} hit limit for: ${query}`, tags: "warning,no_entry", priority: 2 }));
     return env.ASSETS.fetch(new Request(new URL("/limit.webp", url.origin)));
   }

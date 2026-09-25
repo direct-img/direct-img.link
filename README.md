@@ -92,7 +92,7 @@ Use images to complement your responses, powered by Brave.
 
 ### New Searches (Cache Misses)
 
-- **35 new searches per day per IP** (resets at midnight UTC), then `limit.webp` is served
+- **20 new searches per day per IP** (resets at midnight UTC), then `limit.webp` is served
 - **Cache hits are unlimited** (within WAF limits above)
 - Failed searches count toward the limit and are remembered for 24h (`bad.webp`)
 - WAF counters are approximate (not shared perfectly across Cloudflare servers), so bursts may slip slightly past 10
