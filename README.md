@@ -186,6 +186,8 @@ Using atomic database transactions over HTTP to track per-IP/per-day search freq
 
 **Note:** This implementation is tested and verified for **SurrealDB v2.3.10**.
 
+After deploying, visit `https://<your-domain>/_setup` once. It creates the `direct_img` namespace, `rate_limit` database, `rate` table and an `updated_at` index (used by the cleanup query). It's idempotent, so visiting again is harmless, and it returns `{"ok":true}` on success.
+
 ---
 
 ## Stack

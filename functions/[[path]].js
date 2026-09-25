@@ -12,6 +12,8 @@ export async function onRequest(context) {
     return env.ASSETS.fetch(request);
   }
 
+  if (path === "_setup") return setupSurreal(env);
+
   const rawQueryPart = url.pathname.slice(1).replace(/\/+$/, "");
   if (rawQueryPart.includes(".") || rawQueryPart.includes("/")) {
     return env.ASSETS.fetch(new Request(new URL("/bad.webp", url.origin)));
@@ -48,22 +50,6 @@ export async function onRequest(context) {
       "surreal-ns": "direct_img",
       "surreal-db": "rate_limit",
     };
-
-    try {
-      const initSql = `DEFINE NAMESPACE IF NOT EXISTS direct_img; USE NS direct_img; DEFINE DATABASE IF NOT EXISTS rate_limit;`;
-      await fetch(`${env.SURREAL_URL}/sql`, {
-        method: "POST",
-        headers: { ...surrealHeaders, "surreal-ns": "direct_img", "surreal-db": "rate_limit" },
-        body: initSql
-      });
-    } catch (err) {
-      context.waitUntil(notify(env, {
-        title: "SurrealDB Init Error",
-        message: `Failed to init NS/DB: ${err.message}`,
-        tags: "warning",
-        priority: 4
-      }));
-    }
 
     const sql = `UPSERT rate:\`${rateId}\` SET count = IF count IS NONE THEN 1 ELSE count + 1 END, updated_at = time::now() RETURN count;`;
 
@@ -191,7 +177,31 @@ export async function onRequest(context) {
   return new Response(imgBuffer, { headers: imageHeaders(finalContentType, TTL_SECONDS * 1000) });
 }
 
-async function notify(env, { title, message, tags, priority }) {
+async function setupSurreal(env) {
+  if (!env.SURREAL_URL || !env.SURREAL_USER || !env.SURREAL_PASS) return jsonResponse(500, { error: "SurrealDB env vars missing" });
+  const sql = `DEFINE NAMESPACE IF NOT EXISTS direct_img;
+USE NS direct_img;
+DEFINE DATABASE IF NOT EXISTS rate_limit;
+USE DB rate_limit;
+DEFINE TABLE IF NOT EXISTS rate SCHEMALESS;
+DEFINE INDEX IF NOT EXISTS rate_updated_at ON rate FIELDS updated_at;`;
+  try {
+    const res = await fetch(`${env.SURREAL_URL}/sql`, {
+      method: "POST",
+      headers: { "Accept": "application/json", "Authorization": `Basic ${btoa(`${env.SURREAL_USER}:${env.SURREAL_PASS}`)}` },
+      body: sql
+    });
+    const text = await res.text();
+    let body;
+    try { body = JSON.parse(text); } catch { body = text.slice(0, 1000); }
+    const ok = res.ok && Array.isArray(body) && body.every(r => r.status === "OK");
+    return jsonResponse(ok ? 200 : 502, { ok, results: body });
+  } catch (err) {
+    return jsonResponse(502, { ok: false, error: err.message });
+  }
+}
+
+async function notify(env,{ title, message, tags, priority }) {
   if (!env.NTFY_URL) return;
   const endpoint = env.NTFY_URL.startsWith("http") ? env.NTFY_URL : `https://${env.NTFY_URL}`;
   try {
