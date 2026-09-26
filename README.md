@@ -6,7 +6,7 @@ Give your AI a system instruction to embed images using `direct-img.link` and th
 
 ## Usage
 
-![orange cat](https://direct-img.link/orange+cat)
+![orange cat](https://free.direct-img.link/orange+cat)
 
 ```markdown
 ![orange cat](https://direct-img.link/orange+cat)
