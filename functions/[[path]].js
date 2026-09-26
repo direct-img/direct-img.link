@@ -7,17 +7,17 @@ export async function onRequest(context) {
   const { request, env, params } = context;
   const url = new URL(request.url);
   const path = params.path?.join("/") || "";
+  const asset = f => env.ASSETS.fetch(new Request(new URL(`/assets/${f}`, url.origin)));
 
-  if (!path || path === "index.html" || path === "favicon.ico" || path === "robots.txt" || path === "limit.webp" || path === "bad.webp") {
+  if (!path || path === "index.html" || path === "robots.txt" || path.startsWith("assets/")) {
     return env.ASSETS.fetch(request);
   }
+  if (path === "favicon.ico") return asset("favicon.ico");
 
   if (path === "_setup") return setupSurreal(env);
 
   const rawQueryPart = url.pathname.slice(1).replace(/\/+$/, "");
-  if (rawQueryPart.includes(".") || rawQueryPart.includes("/")) {
-    return env.ASSETS.fetch(new Request(new URL("/bad.webp", url.origin)));
-  }
+  if (rawQueryPart.includes(".") || rawQueryPart.includes("/")) return asset("bad.webp");
 
   const query = normalizeQuery(path);
   if (!query) return jsonResponse(400, { error: "Empty query" });
@@ -28,7 +28,7 @@ export async function onRequest(context) {
 
   const cached = await env.DIRECT_IMG_CACHE.get(cacheKey, "json");
   if (cached) {
-    if (cached.err) return env.ASSETS.fetch(new Request(new URL("/bad.webp", url.origin)));
+    if (cached.err) return asset("bad.webp");
     const obj = await env.R2_IMAGES.get(r2Key);
     if (obj) {
       const nowSec = Math.floor(Date.now() / 1000);
@@ -120,7 +120,7 @@ export async function onRequest(context) {
 
   if (count > 20) {
     context.waitUntil(notify(env, { title: "Rate Limit Hit", message: `IP ${ip} hit limit for: ${query}`, tags: "warning,no_entry", priority: 2 }));
-    return env.ASSETS.fetch(new Request(new URL("/limit.webp", url.origin)));
+    return asset("limit.webp");
   }
 
   context.waitUntil(notify(env, { title: "New Search", message: `Query: ${query} (Search #${count} for ${ip})\n${url.origin}/${path}`, tags: "mag", priority: 2 }));
@@ -128,7 +128,7 @@ export async function onRequest(context) {
   const fail = async (t, m, tag, p) => {
     context.waitUntil(notify(env, { title: t, message: m, tags: tag, priority: p }));
     await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), err: true }), { expirationTtl: 86400 });
-    return env.ASSETS.fetch(new Request(new URL("/bad.webp", url.origin)));
+    return asset("bad.webp");
   };
 
   let imageUrls = await braveImageSearch(query, env.BRAVE_API_KEY);
