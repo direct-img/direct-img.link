@@ -68,7 +68,27 @@ Use images to complement your responses, powered by Brave.</code></pre>
             <h2>Usage</h2>
             <p>Embed directly in your markdown files:</p>
             <pre><code>![orange cat](https://direct-img.link/orange+cat)</code></pre>
+            <p>Not the image you wanted? Add <code>?i=2</code> (up to <code>20</code>) to serve the next one. Broken images are skipped, so every <code>i</code> is different:</p>
+            <pre><code>![orange cat](https://direct-img.link/orange+cat?i=2)</code></pre>
             <p style="font-size:0.85rem;margin-top:12px;color:var(--text-muted);">* Note: Literal dots (.) and slashes (/) are rejected to prevent bot abuse. Use <code>%2E</code> or <code>%2F</code> if your query requires them.</p>
+        </section>
+
+        <section>
+            <h2>Free Images</h2>
+            <p>Need images you can publish? <code>free.direct-img.link</code> only serves images marked <strong>free of restrictions</strong> (public domain or CC0), so no credit is needed.</p>
+            <pre><code>![orange cat](https://free.direct-img.link/orange+cat)
+![orange cat](https://free.direct-img.link/orange+cat?i=2)
+![orange cat](https://free.direct-img.link/orange+cat?src=wikimedia&amp;i=2)</code></pre>
+            <table>
+                <thead>
+                    <tr><th>Param</th><th>Values</th><th>Default</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>src</code></td><td><code>openverse</code>, <code>wikimedia</code></td><td>Openverse, then Wikimedia</td></tr>
+                    <tr><td><code>i</code></td><td><code>1</code>–<code>20</code> (which result)</td><td><code>1</code></td></tr>
+                </tbody>
+            </table>
+            <p style="font-size:0.85rem;color:var(--text-muted);">* Both params are optional and work in any order. Licenses come from each source and can be wrong, so check the original before publishing. Images from <a href="https://openverse.org">Openverse</a> (made using the Openverse API, not endorsed or certified by Openverse) and <a href="https://commons.wikimedia.org">Wikimedia Commons</a>.</p>
         </section>
 
         <section>
@@ -82,7 +102,7 @@ Use images to complement your responses, powered by Brave.</code></pre>
                     <tr><td>New Searches</td><td>20 per day per IP</td><td>Limit image served</td></tr>
                 </tbody>
             </table>
-            <p style="font-size:0.85rem;color:var(--text-muted);">* Cached images don't count toward the daily limit and keep loading after you hit it. The burst limit applies to all image requests and is enforced approximately. The daily limit resets at 00:00 UTC.</p>
+            <p style="font-size:0.85rem;color:var(--text-muted);">* The daily limit is shared with free.direct-img.link. Cached images don't count toward it and keep loading after you hit it. The burst limit applies to all image requests and is enforced approximately. The daily limit resets at 00:00 UTC.</p>
         </section>
 
         <section>
