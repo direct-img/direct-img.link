@@ -32,6 +32,21 @@ https://direct-img.link/new+york+city
 | u.s. president | `/u.s.+president` |
 | 90's fashion | `/90%27s+fashion` |
 
+### Picking a Result
+
+Add `?i=` to serve a later search result instead of the first, e.g. when the first image isn't the one you want:
+
+```
+https://direct-img.link/orange+cat?i=2
+```
+
+- `i` is `1`–`20`, default `1`. Invalid values serve `bad.webp`
+- Leading zeros are ignored (`?i=02` = `?i=2`)
+- Only images that download count, so broken links and deleted photos are skipped and every `i` is a different image. `?i=2` is the 2nd working image
+- Higher `i` values take a little longer, since the working images before it are downloaded to count them
+- If there aren't `i` working images, `bad.webp` is served
+- Each `i` is searched and cached separately, and counts as its own search
+
 ## Query Normalization
 
 All queries are normalized before caching and searching:
@@ -66,10 +81,36 @@ Literal slashes (`/`) and dots (`.`) in the URL path are **rejected** to prevent
 
 ### Things to know
 
-- **Query parameters (`?...`)** are ignored — `/orange+cat?size=large` → `orange cat`
+- **Query parameters (`?...`)** other than `i` (and `src` on [free.direct-img.link](#free-images)) are ignored — `/orange+cat?size=large` → `orange cat`
 - **Fragments (`#...`)** are never sent to the server by browsers
 - **Double-encoded values** are decoded once — `%2520` becomes `%20` (literal), not a space
 - Two queries that normalize to the same string share the same cached image
+
+## Free Images
+
+Need images you can publish? `free.direct-img.link` only serves images marked **free of restrictions** (public domain or CC0), so no credit is needed. Same URL format, plus an optional `src`:
+
+```markdown
+![orange cat](https://free.direct-img.link/orange+cat)
+![orange cat](https://free.direct-img.link/orange+cat?i=2)
+![orange cat](https://free.direct-img.link/orange+cat?src=wikimedia&i=2)
+```
+
+| Param | Values | Default |
+|---|---|---|
+| `src` | `openverse`, `wikimedia` (case-insensitive) | Openverse, then Wikimedia once Openverse's results run out |
+| `i` | `1`–`20` — works the same as [on the main site](#picking-a-result) | `1` |
+
+- Both are optional and can be used alone or together, in any order (`?i=2&src=wikimedia` = `?src=wikimedia&i=2`)
+- Invalid values serve `bad.webp`
+- Each `src` + `i` + query combination is searched and cached separately, and counts as its own search
+
+**Sources:**
+
+- [Openverse](https://openverse.org) — searched with `license=cc0,pdm`, JPG/PNG/GIF/WebP only. Made using the Openverse API, but not endorsed or certified by Openverse.
+- [Wikimedia Commons](https://commons.wikimedia.org) — searched with `filetype:bitmap haslicense:unrestricted` (Commons' own "no restrictions" filter). Served at up to 1920px wide.
+
+Licenses come from each source's metadata and can be wrong. Check the original before publishing anything important.
 
 ## For AI System Prompts
 
@@ -92,11 +133,12 @@ Use images to complement your responses, powered by Brave.
 
 ### New Searches (Cache Misses)
 
-- **20 new searches per day per IP** (resets at midnight UTC), then `limit.webp` is served
+- **20 new searches per day per IP** (resets at midnight UTC), then `limit.webp` is served — shared between `direct-img.link` and `free.direct-img.link`
 - **Cache hits are unlimited** (within WAF limits above)
 - Failed searches count toward the limit and are remembered for 24h (`bad.webp`)
 - WAF counters are approximate (not shared perfectly across Cloudflare servers), so bursts may slip slightly past 10
 - **Brave API quota:** $5 free monthly credits (1,000 queries), then $5/1k requests
+- **Openverse & Wikimedia:** free, no quota costs
 
 ## Caching
 
@@ -126,7 +168,21 @@ Free community service. Donations help cover API and infrastructure costs.
 5. Go to your [API dashboard](https://api.search.brave.com/app/#/subscriptions)
 6. Copy your **API key** (starts with `BSA...`)
 
-### 2. Cloudflare Resources
+### 2. Openverse API Credentials (Optional)
+
+Free images work without credentials, but anonymous Openverse requests are limited to 200/day. Register once to get higher limits:
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"name":"<unique app name>","description":"<what you use it for>","email":"<your email>"}' https://api.openverse.org/v1/auth_tokens/register/
+```
+
+1. Save the returned `client_id` and `client_secret` — they can't be retrieved later
+2. Click the verification link Openverse emails you (until then, anonymous limits apply)
+3. Add them as the `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET` secrets below
+
+The function exchanges them for an access token (valid ~12h) and caches it in KV, fetching a new one automatically when it expires.
+
+### 3. Cloudflare Resources
 
 Create in your Cloudflare dashboard:
 
@@ -135,7 +191,7 @@ Create in your Cloudflare dashboard:
 | R2 Bucket | `direct-img-store` | Stores cached images |
 | KV Namespace | `DIRECT_IMG_CACHE` | Cache existence + content type + timestamp |
 
-### 3. Pages Bindings
+### 4. Pages Bindings
 
 **Settings → Functions → Bindings:**
 
@@ -144,13 +200,15 @@ Create in your Cloudflare dashboard:
 | R2 Bucket | `R2_IMAGES` | `direct-img-store` |
 | KV Namespace | `DIRECT_IMG_CACHE` | `DIRECT_IMG_CACHE` |
 
-### 4. Secrets
+### 5. Secrets
 
 **Settings → Environment variables:**
 
 | Variable | Description | Required |
 |---|---|---|
 | `BRAVE_API_KEY` | Brave Search API key | Yes |
+| `OPENVERSE_CLIENT_ID` | Openverse app client ID (free images) | Optional |
+| `OPENVERSE_CLIENT_SECRET` | Openverse app client secret (free images) | Optional |
 | `SURREAL_URL` | SurrealDB URL (e.g. `https://db.site.com`) | Yes |
 | `SURREAL_USER` | SurrealDB username | Yes |
 | `SURREAL_PASS` | SurrealDB password | Yes |
@@ -158,15 +216,19 @@ Create in your Cloudflare dashboard:
 | `GOATCOUNTER_URL` | GoatCounter site URL for image hit analytics (e.g. `https://direct-img.goatcounter.com`) | Optional |
 | `GOATCOUNTER_TOKEN` | GoatCounter API token with "Record pageviews" permission | Optional |
 
-### 5. WAF Rules
+### 6. WAF Rules
 
 **Security → WAF → Rate limiting rules:**
 
 1. **Rate Limit** — 10 req/10s per IP → Block 10s
 
-### 6. Deploy
+### 7. Deploy
 
 Fork this repo, connect to Cloudflare Pages, deploy.
+
+### 8. Free Images Domain
+
+**Pages project → Custom domains → Set up a domain:** add `free.<your-domain>`. Any hostname starting with `free.` serves free images; everything else serves regular search.
 
 ---
 
@@ -174,13 +236,21 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 
 ### R2: `direct-img-store`
 
-**Key:** `<sha256-of-normalized-query>` — derived from query, no lookup needed. Stored with original content type from source.
+**Key:** `<sha256-of-KV-key>` (see below) — for a plain query with no `i`, that's the SHA-256 of the normalized query. Free images use `free/<sha256-of-KV-key>`. Derived from the request, no lookup needed. Stored with original content type from source.
 
 Add an object lifecycle rule in **R2 → direct-img-store → Settings** that applies to all prefixes and deletes uploaded objects after **90 days**. This removes expired objects even when their query is never requested again.
 
 ### KV: `DIRECT_IMG_CACHE`
 
 **Key:** normalized query (lowercase, trimmed, max 200 chars) → **Value:** `{"t":1719000000,"ct":"image/jpeg"}` — **TTL:** 90 days
+
+Other keys share the namespace. They use uppercase prefixes, which can never collide with normalized (always lowercase) queries:
+
+| Key | Value | TTL |
+|---|---|---|
+| `WEB:<i>:<query>` — main site with `i` > 1 (e.g. `WEB:2:orange cat`) | Same as above | 90 days |
+| `FREE:<src or auto>:<i>:<query>` (e.g. `FREE:wikimedia:2:orange cat`) | Same as above | 90 days |
+| `OPENVERSE_TOKEN` | Openverse access token | Token lifetime minus 10 min |
 
 ### Database: `SurrealDB` (Rate Limiting)
 
@@ -200,6 +270,7 @@ After deploying, visit `https://<your-domain>/_setup` once. It creates the `dire
 - **SurrealDB (v2.3.10)** — atomic rate limiting
 - **Cloudflare WAF** — layer 7 mitigation
 - **Brave Image Search API** — image sourcing
+- **Openverse API + Wikimedia Commons API** — free image sourcing
 
 ---
 

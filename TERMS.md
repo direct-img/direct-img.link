@@ -8,6 +8,7 @@ By using direct-img.link ("the service"), you agree to these terms. If you don't
 
 - Images come from third-party websites and belong to their owners. We don't own, license, or endorse them.
 - You are responsible for making sure you have the rights to any image you display or publish.
+- free.direct-img.link only serves images that Openverse or Wikimedia Commons mark as free of restrictions (public domain or CC0). These labels come from the sources and can be wrong, so check the original before relying on them.
 
 ## Results can be wrong, change, or be inappropriate
 

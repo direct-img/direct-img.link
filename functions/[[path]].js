@@ -1,7 +1,10 @@
 import { braveImageSearch } from "./_utils/brave.js";
 import { bingImageSearchFallback } from "./_utils/bing.js";
+import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
+import { isFlickrPlaceholder } from "./_utils/flickr.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
+const MAX_INDEX = 20;
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -23,10 +26,18 @@ export async function onRequest(context) {
   if (!query) return jsonResponse(400, { error: "Empty query" });
   if (query.length > 200) return jsonResponse(400, { error: "Query too long (max 200 characters)" });
 
-  context.waitUntil(countHit(env, request, query));
+  // ?i= picks which result to serve; free.direct-img.link also takes ?src= and serves only unrestricted images
+  const free = url.hostname.startsWith("free.");
+  const i = parseIndex(url.searchParams);
+  const src = free ? parseFreeSource(url.searchParams) : null;
+  if (!i || (free && !src)) return asset("bad.webp");
 
-  const cacheKey = query;
-  const r2Key = await sha256(query);
+  context.waitUntil(countHit(env, request, query, free));
+
+  // Main-site i=1 keeps the bare query so existing cache entries stay valid.
+  // Other keys use uppercase prefixes, which can't collide with (always lowercased) queries.
+  const cacheKey = free ? `FREE:${src}:${i}:${query}` : i === 1 ? query : `WEB:${i}:${query}`;
+  const r2Key = `${free ? "free/" : ""}${await sha256(cacheKey)}`;
 
   const cached = await env.DIRECT_IMG_CACHE.get(cacheKey, "json");
   if (cached) {
@@ -125,7 +136,7 @@ export async function onRequest(context) {
     return asset("limit.webp");
   }
 
-  context.waitUntil(notify(env, { title: "New Search", message: `Query: ${query} (Search #${count} for ${ip})\n${url.origin}/${path}`, tags: "mag", priority: 2 }));
+  context.waitUntil(notify(env, { title: free ? "New Free Search" : "New Search", message: `Query: ${query} (Search #${count} for ${ip})\n${url.origin}/${path}${url.search}`, tags: "mag", priority: 2 }));
 
   const fail = async (t, m, tag, p) => {
     context.waitUntil(notify(env, { title: t, message: m, tags: tag, priority: p }));
@@ -133,29 +144,25 @@ export async function onRequest(context) {
     return asset("bad.webp");
   };
 
-  let imageUrls = await braveImageSearch(query, env.BRAVE_API_KEY);
-  
-  if (!imageUrls || imageUrls.length === 0) {
-    context.waitUntil(notify(env, { title: "Brave Search Empty", message: `No results for: ${query}. Trying Bing Fallback.`, tags: "warning,mag", priority: 3 }));
-    imageUrls = await bingImageSearchFallback(query);
-  }
-
-  if (!imageUrls || imageUrls.length === 0) return await fail("Search Failed", `Both Brave and Bing returned no results for: ${query}`, "question", 3);
-
+  const imageUrls = free ? freeImageUrls(query, src, env) : webImageUrls(context, query);
   const GLOBAL_DEADLINE = Date.now() + 20000;
-  let imgResult = null;
+  let imgResult = null, tried = 0, found = 0;
   const failReasons = [];
 
-  for (const imgUrl of imageUrls) {
+  // i counts only images that download, so dead links and placeholders never take up an index
+  for await (const imgUrl of imageUrls) {
+    tried++;
     const remaining = GLOBAL_DEADLINE - Date.now();
     if (remaining <= 500) {
       failReasons.push("Global timeout reached");
       break;
     }
-    const res = await fetchImage(imgUrl, Math.min(remaining, 5000));
+    const res = await fetchImage(imgUrl, Math.min(remaining, 5000), free ? FREE_UA : undefined);
     if (res.success) {
-      imgResult = res;
-      break;
+      if (++found === i) {
+        imgResult = res;
+        break;
+      }
     } else {
       try {
         const host = new URL(imgUrl).hostname.replace(/^www\./, '');
@@ -166,9 +173,10 @@ export async function onRequest(context) {
     }
   }
 
+  if (!tried) return await fail("Search Failed", `${free ? "No free results" : "Both Brave and Bing returned no results"} for: ${cacheKey}`, "question", 3);
   if (!imgResult) {
     const reasonStr = failReasons.slice(0, 6).join(", ") + (failReasons.length > 6 ? ", ..." : "");
-    return await fail("Fetch Error (502)", `All sources failed for: ${query}\nReasons: ${reasonStr}`, "boom,x", 4);
+    return await fail("Fetch Error (502)", `Found ${found} of ${i} working images for: ${cacheKey}\nReasons: ${reasonStr}`, "boom,x", 4);
   }
 
   const { buffer: imgBuffer, contentType: finalContentType } = imgResult;
@@ -177,6 +185,20 @@ export async function onRequest(context) {
   await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: finalContentType }), { expirationTtl: TTL_SECONDS });
 
   return new Response(imgBuffer, { headers: imageHeaders(finalContentType, TTL_SECONDS * 1000) });
+}
+
+// ?i=1..MAX_INDEX (default 1). Returns null if invalid.
+function parseIndex(searchParams) {
+  const i = searchParams.get("i") || "1";
+  return /^\d+$/.test(i) && +i >= 1 && +i <= MAX_INDEX ? +i : null;
+}
+
+// Yields Brave results, or Bing's if Brave has none
+async function* webImageUrls(context, query) {
+  const urls = await braveImageSearch(query, context.env.BRAVE_API_KEY);
+  if (urls?.length) return yield* urls;
+  context.waitUntil(notify(context.env, { title: "Brave Search Empty", message: `No results for: ${query}. Trying Bing Fallback.`, tags: "warning,mag", priority: 3 }));
+  yield* (await bingImageSearchFallback(query)) || [];
 }
 
 async function setupSurreal(env) {
@@ -211,14 +233,14 @@ async function notify(env,{ title, message, tags, priority }) {
   } catch {}
 }
 
-async function countHit(env, request, query) {
+async function countHit(env, request, query, free) {
   if (!env.GOATCOUNTER_URL || !env.GOATCOUNTER_TOKEN) return;
   const h = k => request.headers.get(k) || "";
   try {
     await fetch(`${env.GOATCOUNTER_URL}/api/v0/count`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.GOATCOUNTER_TOKEN}` },
-      body: JSON.stringify({ no_sessions: true, hits: [{ path: `/${query.replace(/ /g, "+")}`, title: query, ref: h("referer"), user_agent: h("user-agent"), ip: h("cf-connecting-ip") }] }),
+      body: JSON.stringify({ no_sessions: true, hits: [{ path: `${free ? "/free" : ""}/${query.replace(/ /g, "+")}`, title: query, ref: h("referer"), user_agent: h("user-agent"), ip: h("cf-connecting-ip") }] }),
       signal: AbortSignal.timeout(5000)
     });
   } catch {}
@@ -237,10 +259,10 @@ async function sha256(str) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function fetchImage(imageUrl, timeoutMs = 5000) {
+async function fetchImage(imageUrl, timeoutMs = 5000, ua = "Mozilla/5.0") {
   try {
     const res = await fetch(imageUrl, {
-      headers: { "User-Agent": "Mozilla/5.0", "Accept": "image/avif,image/webp,image/*,*/*;q=0.8" },
+      headers: { "User-Agent": ua, "Accept": "image/avif,image/webp,image/*,*/*;q=0.8" },
       redirect: "follow", signal: AbortSignal.timeout(timeoutMs), cf: { cacheTtl: 0 }
     });
     if (!res.ok) return { success: false, reason: `HTTP ${res.status}` };
@@ -253,7 +275,8 @@ async function fetchImage(imageUrl, timeoutMs = 5000) {
     
     const buffer = await res.arrayBuffer();
     if (buffer.byteLength > 10485760) return { success: false, reason: `Buffer >10MB` };
-    
+    if (await isFlickrPlaceholder(res.url || imageUrl, buffer)) return { success: false, reason: "Flickr placeholder" };
+
     return { success: true, buffer, contentType: ct };
   } catch (err) { 
     return { success: false, reason: err.name === 'TimeoutError' ? 'Timeout' : err.message }; 
