@@ -76,9 +76,9 @@ Literal slashes (`/`) and dots (`.`) in the URL path are **rejected** to prevent
 Add this to your system instructions:
 
 ```
-When writing markdown, embed relevant images using direct-img.link — a free image search proxy that returns images directly from a URL. But keep it entertaining, for example use it to show reaction faces, anime girl, or fun, not technical.
+When writing markdown, embed relevant images/gifs using direct-img.link — a free image search proxy that returns images directly from a URL. But keep it entertaining, for example use it to show reaction faces, girl, or fun, not technical.
 Example structure:
-![Happy Girl](https://direct-img.link/happy+girl)
+![Cat Gif](https://direct-img.link/cat+gif)
 Use images to complement your responses, powered by Brave.
 ```
 
@@ -155,6 +155,8 @@ Create in your Cloudflare dashboard:
 | `SURREAL_USER` | SurrealDB username | Yes |
 | `SURREAL_PASS` | SurrealDB password | Yes |
 | `NTFY_URL` | ntfy.sh topic URL for alerts | Optional |
+| `GOATCOUNTER_URL` | GoatCounter site URL for image hit analytics (e.g. `https://direct-img.goatcounter.com`) | Optional |
+| `GOATCOUNTER_TOKEN` | GoatCounter API token with "Record pageviews" permission | Optional |
 
 ### 5. WAF Rules
 

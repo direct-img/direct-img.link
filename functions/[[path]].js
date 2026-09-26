@@ -23,6 +23,8 @@ export async function onRequest(context) {
   if (!query) return jsonResponse(400, { error: "Empty query" });
   if (query.length > 200) return jsonResponse(400, { error: "Query too long (max 200 characters)" });
 
+  context.waitUntil(countHit(env, request, query));
+
   const cacheKey = query;
   const r2Key = await sha256(query);
 
@@ -206,6 +208,19 @@ async function notify(env,{ title, message, tags, priority }) {
   const endpoint = env.NTFY_URL.startsWith("http") ? env.NTFY_URL : `https://${env.NTFY_URL}`;
   try {
     await fetch(endpoint, { method: "POST", body: message, headers: { "Title": title, "Tags": tags, "Priority": priority.toString() } });
+  } catch {}
+}
+
+async function countHit(env, request, query) {
+  if (!env.GOATCOUNTER_URL || !env.GOATCOUNTER_TOKEN) return;
+  const h = k => request.headers.get(k) || "";
+  try {
+    await fetch(`${env.GOATCOUNTER_URL}/api/v0/count`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.GOATCOUNTER_TOKEN}` },
+      body: JSON.stringify({ no_sessions: true, hits: [{ path: `/${query.replace(/ /g, "+")}`, title: query, ref: h("referer"), user_agent: h("user-agent"), ip: h("cf-connecting-ip") }] }),
+      signal: AbortSignal.timeout(5000)
+    });
   } catch {}
 }
 
