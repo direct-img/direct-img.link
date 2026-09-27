@@ -26,11 +26,13 @@ export async function onRequest(context) {
   if (!query) return jsonResponse(400, { error: "Empty query" });
   if (query.length > 200) return jsonResponse(400, { error: "Query too long (max 200 characters)" });
 
-  // ?i= picks which result to serve; free.direct-img.link also takes ?src= and serves only unrestricted images
+  // ?i= picks which result to serve; free.direct-img.link also takes ?src= and serves only unrestricted images.
+  // Any other param (e.g. scanner probes like ?path=../../.env) is rejected before it can cost a search.
   const free = url.hostname.startsWith("free.");
   const i = parseIndex(url.searchParams);
   const src = free ? parseFreeSource(url.searchParams) : null;
-  if (!i || (free && !src)) return asset("bad.webp");
+  const extra = [...url.searchParams.keys()].some(k => k !== "i" && !(free && k === "src"));
+  if (!i || (free && !src) || extra) return asset("bad.webp");
 
   context.waitUntil(countHit(env, request, query, free));
 

@@ -81,7 +81,7 @@ Literal slashes (`/`) and dots (`.`) in the URL path are **rejected** to prevent
 
 ### Things to know
 
-- **Query parameters (`?...`)** other than `i` (and `src` on [free.direct-img.link](#free-images)) are ignored — `/orange+cat?size=large` → `orange cat`
+- **Query parameters (`?...`)** other than `i` (and `src` on [free.direct-img.link](#free-images)) serve `bad.webp` — `/orange+cat?size=large` ❌
 - **Fragments (`#...`)** are never sent to the server by browsers
 - **Double-encoded values** are decoded once — `%2520` becomes `%20` (literal), not a space
 - Two queries that normalize to the same string share the same cached image
