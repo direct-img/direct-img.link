@@ -2,7 +2,7 @@ import { braveImageSearch } from "./_utils/brave.js";
 import { bingImageSearchFallback } from "./_utils/bing.js";
 import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
 import { isFlickrPlaceholder } from "./_utils/flickr.js";
-import * as LIMITS from "./_utils/rate-limit.js";
+import * as LIMITS from "../assets/rate-limit.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
 const MAX_INDEX = 20;
@@ -13,8 +13,8 @@ export async function onRequest(context) {
   const path = params.path?.join("/") || "";
   const asset = f => env.ASSETS.fetch(new Request(new URL(`/assets/${f}`, url.origin)));
 
-  if (!path || path === "index.html") return homepage(env, url);
-  if (path === "robots.txt" || path.startsWith("assets/")) {
+  // _routes.json serves these statically without invoking this function; kept as a fallback
+  if (!path || path === "index.html" || path === "robots.txt" || path.startsWith("assets/")) {
     return env.ASSETS.fetch(request);
   }
   if (path === "favicon.ico") return asset("favicon.ico");
@@ -205,20 +205,6 @@ async function* webImageUrls(context, query) {
   if (urls?.length) return yield* urls;
   context.waitUntil(notify(context.env, { title: "Brave Search Empty", message: `No results for: ${query}. Trying Bing Fallback.`, tags: "warning,mag", priority: 3 }));
   yield* (await bingImageSearchFallback(query)) || [];
-}
-
-// Fills each <span data-limit="NAME"> with that export of rate-limit.js, so the page never shows stale limits.
-// Fetched without the browser's If-None-Match and served without an ETag, so a cached copy can't either.
-async function homepage(env, url) {
-  const res = await env.ASSETS.fetch(new Request(url));
-  const headers = new Headers(res.headers);
-  headers.delete("etag");
-  return new HTMLRewriter().on("[data-limit]", {
-    element: e => {
-      const v = LIMITS[e.getAttribute("data-limit")];
-      if (v != null) e.setInnerContent(`${v}`);
-    }
-  }).transform(new Response(res.body, { status: res.status, headers }));
 }
 
 async function setupSurreal(env) {
