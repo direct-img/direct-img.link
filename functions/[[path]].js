@@ -54,7 +54,9 @@ export async function onRequest(context) {
 
   const ip = request.headers.get("cf-connecting-ip") || "unknown";
   const today = new Date().toISOString().slice(0, 10);
-  const rateId = await sha256(`${ip}:${today}`);
+  // free.* gets its own counter (prefixed so main-site ids stay unchanged) since it never spends Brave credits
+  const rateId = await sha256(`${free ? "free:" : ""}${ip}:${today}`);
+  const limit = free ? 100 : 35;
   let count = 1;
 
   if (env.SURREAL_URL && env.SURREAL_USER && env.SURREAL_PASS) {
@@ -133,8 +135,8 @@ export async function onRequest(context) {
     }));
   }
 
-  if (count > 35) {
-    context.waitUntil(notify(env, { title: "Rate Limit Hit", message: `IP ${ip} hit limit for: ${query}`, tags: "warning,no_entry", priority: 2 }));
+  if (count > limit) {
+    context.waitUntil(notify(env, { title: free ? "Free Rate Limit Hit" : "Rate Limit Hit", message: `IP ${ip} hit limit for: ${query}`, tags: "warning,no_entry", priority: 2 }));
     return asset("limit.webp");
   }
 
