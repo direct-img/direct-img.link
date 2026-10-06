@@ -2,6 +2,7 @@ import { braveImageSearch } from "./_utils/brave.js";
 import { bingImageSearchFallback } from "./_utils/bing.js";
 import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
 import { isFlickrPlaceholder } from "./_utils/flickr.js";
+import { DAILY_LIMIT, FREE_DAILY_LIMIT } from "./_utils/rate-limit.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
 const MAX_INDEX = 20;
@@ -56,7 +57,7 @@ export async function onRequest(context) {
   const today = new Date().toISOString().slice(0, 10);
   // free.* gets its own counter (prefixed so main-site ids stay unchanged) since it never spends Brave credits
   const rateId = await sha256(`${free ? "free:" : ""}${ip}:${today}`);
-  const limit = free ? 100 : 35;
+  const limit = free ? FREE_DAILY_LIMIT : DAILY_LIMIT;
   let count = 1;
 
   if (env.SURREAL_URL && env.SURREAL_USER && env.SURREAL_PASS) {
