@@ -125,20 +125,12 @@ Use images to complement your responses, powered by Brave.
 
 ## Rate Limits
 
-### WAF Protection (Cloudflare Free)
+Limits change over time, so they aren't listed here. **Check the Rate Limits section on [direct-img.link](https://direct-img.link) for the current limits.**
 
-| Rule | Limit | Action |
-|---|---|---|
-| Rate Limit | ~10 requests/10s per IP | HTTP 429 for ~10s |
-
-### New Searches (Cache Misses)
-
-- **35 new searches per day per IP** on `direct-img.link` and **100** on `free.direct-img.link` (separate counters, reset at midnight UTC), then `limit.webp` is served
-- **Cache hits are unlimited** (within WAF limits above)
+- **New searches (cache misses)** are limited per IP per day, then `limit.webp` is served. `direct-img.link` and `free.direct-img.link` have separate counters, both reset at midnight UTC
+- **Cache hits are unlimited** (within the burst limit)
 - Failed searches count toward the limit and are remembered for 24h (`bad.webp`)
-- WAF counters are approximate (not shared perfectly across Cloudflare servers), so bursts may slip slightly past 10
-- **Brave API quota:** $5 free monthly credits (1,000 queries), then $5/1k requests
-- **Openverse & Wikimedia:** free, no quota costs
+- A Cloudflare WAF burst limit applies to all requests (HTTP 429). Its counters are approximate (not shared perfectly across Cloudflare servers), so bursts may slip slightly past it
 
 ## Caching
 
