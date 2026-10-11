@@ -250,7 +250,7 @@ Using atomic database transactions over HTTP to track per-IP/per-day search freq
 
 The same transaction also claims a per-query lock (`lock:<sha256-of-KV-key>`, expires after 45s), so when several requests miss the cache for the same query at once (on any Cloudflare server), only one searches. The others wait for it to finish, then serve the image it stored in R2, and aren't counted toward the daily limit. The lock is deleted as soon as the result is stored.
 
-**Note:** This implementation is tested and verified for **SurrealDB v2.3.10**.
+**Note:** This implementation is tested and verified for **SurrealDB v2.6.5**.
 
 After deploying, visit `https://<your-domain>/_setup` once. It creates the `direct_img` namespace, `rate_limit` database, `rate` table, an `updated_at` index (used by the cleanup query) and the `lock` table. It's idempotent, so visiting again is harmless, and it returns `{"ok":true}` on success.
 
@@ -261,7 +261,7 @@ After deploying, visit `https://<your-domain>/_setup` once. It creates the `dire
 - **Cloudflare Pages** — hosting + edge functions
 - **Cloudflare R2** — image storage
 - **Cloudflare KV** — generic lookups
-- **SurrealDB (v2.3.10)** — atomic rate limiting + search locks
+- **SurrealDB (v2.6.5)** — atomic rate limiting + search locks
 - **Cloudflare WAF** — layer 7 mitigation
 - **Brave Image Search API** — image sourcing
 - **Openverse API + Wikimedia Commons API** — free image sourcing
