@@ -6,6 +6,8 @@ import * as LIMITS from "../assets/rate-limit.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
 const MAX_INDEX = 20;
+// How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself
+const LOCK_SECONDS = 45;
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -41,7 +43,8 @@ export async function onRequest(context) {
   // Main-site i=1 keeps the bare query so existing cache entries stay valid.
   // Other keys use uppercase prefixes, which can't collide with (always lowercased) queries.
   const cacheKey = free ? `FREE:${src}:${i}:${query}` : i === 1 ? query : `WEB:${i}:${query}`;
-  const r2Key = `${free ? "free/" : ""}${await sha256(cacheKey)}`;
+  const keyHash = await sha256(cacheKey);
+  const r2Key = `${free ? "free/" : ""}${keyHash}`;
 
   const cached = await env.DIRECT_IMG_CACHE.get(cacheKey, "json");
   if (cached) {
@@ -59,48 +62,58 @@ export async function onRequest(context) {
   // free.* gets its own counter (prefixed so main-site ids stay unchanged) since it never spends Brave credits
   const rateId = await sha256(`${free ? "free:" : ""}${ip}:${today}`);
   const limit = free ? LIMITS.FREE_DAILY_LIMIT : LIMITS.DAILY_LIMIT;
-  let count = 1;
+  let count = 1, wait = false, locked = false;
 
-  if (env.SURREAL_URL && env.SURREAL_USER && env.SURREAL_PASS) {
-    const auth = btoa(`${env.SURREAL_USER}:${env.SURREAL_PASS}`);
-    const surrealHeaders = {
+  const db = env.SURREAL_URL && env.SURREAL_USER && env.SURREAL_PASS && (body => fetch(`${env.SURREAL_URL}/sql`, {
+    method: "POST",
+    headers: {
       "Accept": "application/json",
-      "Authorization": `Basic ${auth}`,
+      "Authorization": `Basic ${btoa(`${env.SURREAL_USER}:${env.SURREAL_PASS}`)}`,
       "surreal-ns": "direct_img",
       "surreal-db": "rate_limit",
-    };
+    },
+    body
+  }));
 
-    const sql = `UPSERT rate:\`${rateId}\` SET count = IF count IS NONE THEN 1 ELSE count + 1 END, updated_at = time::now() RETURN count;`;
+  if (db) {
+    // Counts the search and claims this query's lock in the same round trip, so concurrent misses (on any isolate or
+    // colo) search once. A request that finds the lock held writes nothing and waits for the holder's result instead.
+    // It's one transaction because a write conflict (e.g. same-IP misses at once) rolls it all back, so retrying is safe.
+    const sql = `BEGIN TRANSACTION;
+LET $w = lock:\`${keyHash}\`.exp > time::now();
+LET $c = IF !$w THEN (UPSERT ONLY rate:\`${rateId}\` SET count = IF count IS NONE THEN 1 ELSE count + 1 END, updated_at = time::now() RETURN VALUE count) END;
+IF !$w AND $c <= ${limit} THEN (UPSERT lock:\`${keyHash}\` SET exp = time::now() + ${LOCK_SECONDS}s) END;
+RETURN { count: $c, wait: $w };
+COMMIT TRANSACTION;`;
 
     try {
-      const dbRes = await fetch(`${env.SURREAL_URL}/sql`, {
-        method: "POST",
-        headers: surrealHeaders,
-        body: sql
-      });
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const dbRes = await db(sql);
+        const rawText = await dbRes.text();
 
-      const rawText = await dbRes.text();
-
-      if (!dbRes.ok) {
-        context.waitUntil(notify(env, {
-          title: "SurrealDB HTTP Error",
-          message: `Status: ${dbRes.status}\nBody: ${rawText.slice(0, 500)}`,
-          tags: "warning,x",
-          priority: 4
-        }));
-      } else {
+        if (!dbRes.ok) {
+          context.waitUntil(notify(env, {
+            title: "SurrealDB HTTP Error",
+            message: `Status: ${dbRes.status}\nBody: ${rawText.slice(0, 500)}`,
+            tags: "warning,x",
+            priority: 4
+          }));
+          break;
+        }
         try {
           const data = JSON.parse(rawText);
-          if (data[0]?.status === "OK" && data[0]?.result?.length > 0) {
-            count = data[0].result[0].count;
-          } else {
-            context.waitUntil(notify(env, {
-              title: "SurrealDB Unexpected Result",
-              message: `Response: ${rawText.slice(0, 500)}`,
-              tags: "warning",
-              priority: 3
-            }));
+          if (data.every(s => s.status === "OK") && data.at(-1)?.result) {
+            ({ count, wait } = data.at(-1).result);
+            locked = !wait && count <= limit;
+            break;
           }
+          if (attempt < 3 && /conflict/i.test(rawText)) continue;
+          context.waitUntil(notify(env, {
+            title: "SurrealDB Unexpected Result",
+            message: `Response: ${rawText.slice(0, 500)}`,
+            tags: "warning",
+            priority: 3
+          }));
         } catch (parseErr) {
           context.waitUntil(notify(env, {
             title: "SurrealDB Parse Error",
@@ -109,16 +122,11 @@ export async function onRequest(context) {
             priority: 4
           }));
         }
+        break;
       }
 
       if (Math.random() < 0.05) {
-        context.waitUntil(
-          fetch(`${env.SURREAL_URL}/sql`, {
-            method: "POST",
-            headers: surrealHeaders,
-            body: `DELETE rate WHERE updated_at < time::now() - 25h;`
-          }).catch(() => {})
-        );
+        context.waitUntil(db(`DELETE rate WHERE updated_at < time::now() - 25h; DELETE lock WHERE exp < time::now() - 1h;`).catch(() => {}));
       }
     } catch (err) {
       context.waitUntil(notify(env, {
@@ -137,6 +145,18 @@ export async function onRequest(context) {
     }));
   }
 
+  // Another request is already searching this query: wait for it to release the lock (or the lock to expire), then
+  // serve what it stored. R2 is strongly consistent, unlike KV. Nothing stored means its search failed.
+  if (wait) {
+    context.waitUntil(notify(env, { title: free ? "Free Search Deduped" : "Search Deduped", message: `Query: ${query} (waited for in-flight search, not counted, ${ip})\n${url.origin}/${path}${url.search}`, tags: "link", priority: 1 }));
+    for (const end = Date.now() + LOCK_SECONDS * 1000; Date.now() < end;) {
+      await new Promise(r => setTimeout(r, 500));
+      if (!await db(`RETURN lock:\`${keyHash}\`.exp > time::now();`).then(r => r.json()).then(d => d[0].result).catch(() => true)) break;
+    }
+    const obj = await env.R2_IMAGES.get(r2Key);
+    return obj ? new Response(obj.body, { headers: imageHeaders(obj.httpMetadata.contentType, TTL_SECONDS * 1000) }) : asset("bad.webp");
+  }
+
   if (count > limit) {
     context.waitUntil(notify(env, { title: free ? "Free Rate Limit Hit" : "Rate Limit Hit", message: `IP ${ip} hit limit for: ${query}`, tags: "warning,no_entry", priority: 2 }));
     return asset("limit.webp");
@@ -144,9 +164,13 @@ export async function onRequest(context) {
 
   context.waitUntil(notify(env, { title: free ? "New Free Search" : "New Search", message: `Query: ${query} (Search #${count} for ${ip})\n${url.origin}/${path}${url.search}`, tags: "mag", priority: 2 }));
 
+  // Called once the result (image or error) is stored, so waiters serve it right away instead of at lock expiry
+  const release = () => locked && context.waitUntil(db(`DELETE lock:\`${keyHash}\`;`).catch(() => {}));
+
   const fail = async (t, m, tag, p) => {
     context.waitUntil(notify(env, { title: t, message: m, tags: tag, priority: p }));
     await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), err: true }), { expirationTtl: 86400 });
+    release();
     return asset("bad.webp");
   };
 
@@ -189,6 +213,7 @@ export async function onRequest(context) {
   await env.R2_IMAGES.put(r2Key, imgBuffer, { httpMetadata: { contentType: finalContentType } });
 
   await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: finalContentType }), { expirationTtl: TTL_SECONDS });
+  release();
 
   return new Response(imgBuffer, { headers: imageHeaders(finalContentType, TTL_SECONDS * 1000) });
 }
@@ -214,7 +239,8 @@ USE NS direct_img;
 DEFINE DATABASE IF NOT EXISTS rate_limit;
 USE DB rate_limit;
 DEFINE TABLE IF NOT EXISTS rate SCHEMALESS;
-DEFINE INDEX IF NOT EXISTS rate_updated_at ON rate FIELDS updated_at;`;
+DEFINE INDEX IF NOT EXISTS rate_updated_at ON rate FIELDS updated_at;
+DEFINE TABLE IF NOT EXISTS lock SCHEMALESS;`;
   try {
     const res = await fetch(`${env.SURREAL_URL}/sql`, {
       method: "POST",
