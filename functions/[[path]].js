@@ -176,9 +176,7 @@ COMMIT TRANSACTION;`;
     return asset("limit.webp");
   }
 
-  note(list
-    ? { title: `New ${label}Search`, message: `Query: ${query} (from cached results, not counted, ${ip})`, tags: "mag,zap", priority: 1 }
-    : { title: `New ${label}Search`, message: `Query: ${query} (Search #${count} for ${ip})`, tags: "mag", priority: 2 });
+  note({ title: `New ${label}Search`, message: `Query: ${query} (${list ? "from cached results, not counted," : `Search #${count} for`} ${ip})`, tags: list ? "mag,zap" : "mag", priority: 2 });
 
   // Called once the result (image or error) is stored, so waiters serve it right away instead of at lock expiry
   const release = () => locked && context.waitUntil(db(`DELETE lock:\`${keyHash}\`;`).catch(() => {}));
