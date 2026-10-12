@@ -8,6 +8,8 @@ const TTL_SECONDS = 90 * 24 * 60 * 60;
 const MAX_INDEX = 20;
 // How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself
 const LOCK_SECONDS = 45;
+// Image candidates downloaded at once, so one slow or dead host doesn't stall the rest for its full 5s timeout
+const PARALLEL = 4;
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -174,48 +176,64 @@ COMMIT TRANSACTION;`;
     return asset("bad.webp");
   };
 
-  const imageUrls = free ? freeImageUrls(query, src, env) : webImageUrls(context, query);
-  const GLOBAL_DEADLINE = Date.now() + 20000;
-  let imgResult = null, tried = 0, found = 0;
-  const failReasons = [];
+  // Runs under waitUntil so the search still finishes and stores its result if the client disconnects (e.g. a phone
+  // reloading a slow page). Otherwise the runtime cancels it mid-search with the lock still held, and the reload waits
+  // out LOCK_SECONDS only to find nothing stored and get bad.webp.
+  const job = (async () => {
+    const imageUrls = free ? freeImageUrls(query, src, env) : webImageUrls(context, query);
+    const GLOBAL_DEADLINE = Date.now() + 20000;
+    let imgResult = null, tried = 0, found = 0, more = true, timedOut = false;
+    const failReasons = [], queue = [], abort = new AbortController(), it = imageUrls[Symbol.asyncIterator]();
 
-  // i counts only images that download, so dead links and placeholders never take up an index
-  for await (const imgUrl of imageUrls) {
-    tried++;
-    const remaining = GLOBAL_DEADLINE - Date.now();
-    if (remaining <= 500) {
-      failReasons.push("Global timeout reached");
-      break;
-    }
-    const res = await fetchImage(imgUrl, Math.min(remaining, 5000), free ? FREE_UA : undefined);
-    if (res.success) {
-      if (++found === i) {
-        imgResult = res;
-        break;
+    // Keeps up to PARALLEL downloads in flight, queued in result order
+    const fill = async () => {
+      while (more && queue.length < PARALLEL) {
+        const { value: imgUrl, done } = await it.next();
+        if (done) return void (more = false);
+        tried++;
+        const remaining = GLOBAL_DEADLINE - Date.now();
+        if (remaining <= 500) return void (more = false, timedOut = true);
+        queue.push({ imgUrl, res: fetchImage(imgUrl, Math.min(remaining, 5000), free ? FREE_UA : undefined, abort.signal) });
       }
-    } else {
-      try {
-        const host = new URL(imgUrl).hostname.replace(/^www\./, '');
-        failReasons.push(`${host}=${res.reason}`);
-      } catch {
-        failReasons.push(`invalid_url=${res.reason}`);
+    };
+
+    // Results are checked in order, so i still counts only images that download, and dead links and placeholders never
+    // take up an index
+    while ((await fill(), queue.length)) {
+      const { imgUrl, res: pending } = queue.shift(), res = await pending;
+      if (res.success) {
+        if (++found === i) {
+          imgResult = res;
+          break;
+        }
+      } else {
+        try {
+          const host = new URL(imgUrl).hostname.replace(/^www\./, '');
+          failReasons.push(`${host}=${res.reason}`);
+        } catch {
+          failReasons.push(`invalid_url=${res.reason}`);
+        }
       }
     }
-  }
+    abort.abort();
+    if (timedOut) failReasons.push("Global timeout reached");
 
-  if (!tried) return await fail("Search Failed", `${free ? "No free results" : "Both Brave and Bing returned no results"} for: ${cacheKey}`, "question", 3);
-  if (!imgResult) {
-    const reasonStr = failReasons.slice(0, 6).join(", ") + (failReasons.length > 6 ? ", ..." : "");
-    return await fail("Fetch Error (502)", `Found ${found} of ${i} working images for: ${cacheKey}\nReasons: ${reasonStr}`, "boom,x", 4);
-  }
+    if (!tried) return await fail("Search Failed", `${free ? "No free results" : "Both Brave and Bing returned no results"} for: ${cacheKey}`, "question", 3);
+    if (!imgResult) {
+      const reasonStr = failReasons.slice(0, 6).join(", ") + (failReasons.length > 6 ? ", ..." : "");
+      return await fail("Fetch Error (502)", `Found ${found} of ${i} working images for: ${cacheKey}\nReasons: ${reasonStr}`, "boom,x", 4);
+    }
 
-  const { buffer: imgBuffer, contentType: finalContentType } = imgResult;
-  await env.R2_IMAGES.put(r2Key, imgBuffer, { httpMetadata: { contentType: finalContentType } });
+    const { buffer: imgBuffer, contentType: finalContentType } = imgResult;
+    await env.R2_IMAGES.put(r2Key, imgBuffer, { httpMetadata: { contentType: finalContentType } });
 
-  await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: finalContentType }), { expirationTtl: TTL_SECONDS });
-  release();
+    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: finalContentType }), { expirationTtl: TTL_SECONDS });
+    release();
 
-  return new Response(imgBuffer, { headers: imageHeaders(finalContentType, TTL_SECONDS * 1000) });
+    return new Response(imgBuffer, { headers: imageHeaders(finalContentType, TTL_SECONDS * 1000) });
+  })();
+  context.waitUntil(job);
+  return job;
 }
 
 // ?i=1..MAX_INDEX (default 1). Returns null if invalid.
@@ -291,11 +309,12 @@ async function sha256(str) {
   return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function fetchImage(imageUrl, timeoutMs = 5000, ua = "Mozilla/5.0") {
+// abort cancels a download that's no longer needed (another candidate already won)
+async function fetchImage(imageUrl, timeoutMs = 5000, ua = "Mozilla/5.0", abort) {
   try {
     const res = await fetch(imageUrl, {
       headers: { "User-Agent": ua, "Accept": "image/avif,image/webp,image/*,*/*;q=0.8" },
-      redirect: "follow", signal: AbortSignal.timeout(timeoutMs), cf: { cacheTtl: 0 }
+      redirect: "follow", signal: abort ? AbortSignal.any([AbortSignal.timeout(timeoutMs), abort]) : AbortSignal.timeout(timeoutMs), cf: { cacheTtl: 0 }
     });
     if (!res.ok) return { success: false, reason: `HTTP ${res.status}` };
     
