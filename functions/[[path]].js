@@ -215,6 +215,11 @@ COMMIT TRANSACTION;`;
     // The query's cached results, or a fresh search. pos holds the indexes of the working images found so far and next
     // the first URL not tried yet, so a known ?i= downloads only its own image and a new one carries on from next.
     let { urls, pos, next } = list || { urls: await (free ? freeImageUrls(query, src, env) : webImageUrls(query, env, note)), pos: [], next: 0 };
+    // Brave and Bing both failed: ask for donations instead of an AI image, and cache nothing since it's temporary
+    if (!urls) {
+      release();
+      return asset("donate.webp");
+    }
     // Starting at a known image skips the ones before it, so it can't add to pos
     const known = pos.length >= i;
     let at = known ? pos[i - 1] : next, found = known ? i - 1 : pos.length, imgResult = null, timedOut = false;
@@ -279,12 +284,18 @@ function parseIndex(searchParams) {
   return /^\d+$/.test(i) && +i >= 1 && +i <= MAX_INDEX ? +i : null;
 }
 
-// Brave results, or Bing's if Brave has none
+// Brave results, or Bing's if Brave has none or refuses (e.g. once its spending limit is hit). null if Bing fails too,
+// which means we're out of searches rather than that nothing exists.
 async function webImageUrls(query, env, note) {
-  const urls = await braveImageSearch(query, env.BRAVE_API_KEY);
-  if (urls?.length) return urls;
-  note({ title: "Brave Search Empty", message: `No results for: ${query}. Trying Bing Fallback.`, tags: "warning,mag", priority: 3 });
-  return (await bingImageSearchFallback(query)) || [];
+  const brave = await braveImageSearch(query, env.BRAVE_API_KEY);
+  if (brave.urls?.length) return brave.urls;
+  note(brave.error
+    ? { title: "Brave Unavailable", message: `Brave failed for: ${query}. Trying Bing Fallback.\nBrave: ${brave.error}`, tags: "warning,mag", priority: 3 }
+    : { title: "Brave Search Empty", message: `No results for: ${query}. Trying Bing Fallback.`, tags: "warning,mag", priority: 3 });
+  const bing = await bingImageSearchFallback(query);
+  if (bing.urls) return bing.urls;
+  note({ title: "Bing Blocked, Served donate.webp", message: `Bing failed for: ${query}\nBing: ${bing.error}\nBrave: ${brave.error || "no results"}`, tags: "rotating_light,x", priority: 4 });
+  return null;
 }
 
 async function setupSurreal(env) {

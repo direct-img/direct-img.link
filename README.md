@@ -86,6 +86,7 @@ Literal slashes (`/`) and dots (`.`) in the URL path are **rejected** to prevent
 - **Double-encoded values** are decoded once — `%2520` becomes `%20` (literal), not a space
 - Two queries that normalize to the same string share the same cached image
 - **Nothing found?** If a search finds no image (or fewer than `i` working ones), an [AI image](#ai-images) of the query is served instead of `bad.webp`, and cached like any other image. `bad.webp` is only served if the AI image fails too
+- **Out of searches?** If Brave refuses (e.g. its monthly spending limit is reached), Bing is searched instead. If Bing is blocking us too, `donate.webp` is served instead of an AI image, and nothing is cached, so the query works again once either is back
 
 ## Free Images
 
@@ -151,6 +152,7 @@ Limits change over time, so they aren't listed here. **Check the Rate Limits sec
 - **New searches (cache misses)** are limited per IP per day, then `limit.webp` is served. `direct-img.link`, `free.direct-img.link` and `ai.direct-img.link` have separate counters, all reset at midnight UTC
 - **Cache hits are unlimited** (within the burst limit)
 - Other `?i=` values of a query searched in the last hour reuse its results, so they don't count (except on `ai.`, where each `i` is a new image)
+- If Brave's spending limit is hit, searches use Bing; if Bing also blocks us, `donate.webp` is served (not cached)
 - Searches that find nothing count toward the limit. If the AI image served instead fails too, the failure is remembered for 24h (`bad.webp`)
 - A Cloudflare WAF burst limit applies to all requests (HTTP 429). Its counters are approximate (not shared perfectly across Cloudflare servers), so bursts may slip slightly past it
 
@@ -182,6 +184,7 @@ Free community service. Donations help cover API and infrastructure costs.
 4. Subscribe — you get **$5 in free monthly credits** (covers 1,000 queries/month)
 5. Go to your [API dashboard](https://api.search.brave.com/app/#/subscriptions)
 6. Copy your **API key** (starts with `BSA...`)
+7. Optional: set a monthly spending limit there so you never pay past the credit. Once it's reached, searches fall back to Bing
 
 ### 2. Openverse API Credentials (Optional)
 
@@ -292,7 +295,7 @@ After deploying, visit `https://<your-domain>/_setup` once. It creates the `dire
 - **Cloudflare KV** — generic lookups
 - **SurrealDB (v2.6.5)** — atomic rate limiting, search locks + cached result lists
 - **Cloudflare WAF** — layer 7 mitigation
-- **Brave Image Search API** — image sourcing
+- **Brave Image Search API** — image sourcing, with Bing as the fallback
 - **Openverse API + Wikimedia Commons API** — free image sourcing
 - **[AuroraIMG-6M](https://github.com/direct-img/AuroraIMG-6M) on Dokploy** — AI images and the nothing-found fallback
 

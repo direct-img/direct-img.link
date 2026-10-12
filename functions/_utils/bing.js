@@ -1,3 +1,5 @@
+// { urls }, or { error } if Bing failed. Bing finds something for nearly any query (even gibberish), so a page without
+// results almost always means it's blocking us (e.g. with a CAPTCHA) or changed its page format.
 export async function bingImageSearchFallback(query) {
   try {
     // SafeSearch off, like Brave. The cookie is what actually sets it; adlt= alone is ignored.
@@ -8,24 +10,14 @@ export async function bingImageSearchFallback(query) {
         "Cookie": "SRCHHPGUSR=ADLT=OFF"
       }
     });
-    if (!res.ok) return null;
+    if (!res.ok) return { error: `HTTP ${res.status}` };
     const html = await res.text();
-    const urls = [];
-    
+
     // Bing encodes the image payload inside HTML entity attributes and script tags
-    const regex1 = /&quot;murl&quot;:&quot;(https:[^&"]+)&quot;/g;
-    const regex2 = /"murl":"(https:[^"]+)"/g;
-    
-    let match;
-    while ((match = regex1.exec(html)) !== null) {
-      urls.push(match[1].replace(/\\\//g, '/'));
-    }
-    while ((match = regex2.exec(html)) !== null) {
-      urls.push(match[1].replace(/\\\//g, '/'));
-    }
-    
-    return urls.length > 0 ? [...new Set(urls)] : null;
+    const urls = [...html.matchAll(/&quot;murl&quot;:&quot;(https:[^&"]+)&quot;/g), ...html.matchAll(/"murl":"(https:[^"]+)"/g)]
+      .map(m => m[1].replace(/\\\//g, '/'));
+    return urls.length ? { urls: [...new Set(urls)] } : { error: `No results in page (${html.length} bytes, ${res.url})` };
   } catch (err) {
-    return null;
+    return { error: err.message };
   }
 }
