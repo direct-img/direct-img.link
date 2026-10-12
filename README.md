@@ -43,9 +43,9 @@ https://direct-img.link/orange+cat?i=2
 - `i` is `1`–`20`, default `1`. Invalid values serve `bad.webp`
 - Leading zeros are ignored (`?i=02` = `?i=2`)
 - Only images that download count, so broken links and deleted photos are skipped and every `i` is a different image. `?i=2` is the 2nd working image
-- Higher `i` values take a little longer, since the working images before it are downloaded to count them
-- If there aren't `i` working images, `bad.webp` is served
-- Each `i` is searched and cached separately, and counts as its own search
+- Higher `i` values take a little longer the first time, since the working images before it are downloaded to count them
+- If there aren't `i` working images, an [AI image](#ai-images) is served instead
+- Each `i` is cached separately. A search's results are kept for **1 hour**, so other `i` values of the same query within that hour don't search again and **don't count toward the limit**. One that was already counted downloads only its own image
 
 ## Query Normalization
 
@@ -99,12 +99,12 @@ Need images you can publish? `free.direct-img.link` only serves images marked **
 
 | Param | Values | Default |
 |---|---|---|
-| `src` | `openverse`, `wikimedia` (case-insensitive) | Openverse, then Wikimedia once Openverse's results run out |
+| `src` | `openverse`, `wikimedia` (case-insensitive) | Openverse's results, then Wikimedia's |
 | `i` | `1`–`20` — works the same as [on the main site](#picking-a-result) | `1` |
 
 - Both are optional and can be used alone or together, in any order (`?i=2&src=wikimedia` = `?src=wikimedia&i=2`)
 - Invalid values serve `bad.webp`
-- Each `src` + `i` + query combination is searched and cached separately, and counts as its own search
+- Each `src` + `i` + query combination is cached separately. Like the main site, other `i` values within an hour of a search reuse its results and don't count as searches
 
 **Sources:**
 
@@ -150,6 +150,7 @@ Limits change over time, so they aren't listed here. **Check the Rate Limits sec
 
 - **New searches (cache misses)** are limited per IP per day, then `limit.webp` is served. `direct-img.link`, `free.direct-img.link` and `ai.direct-img.link` have separate counters, all reset at midnight UTC
 - **Cache hits are unlimited** (within the burst limit)
+- Other `?i=` values of a query searched in the last hour reuse its results, so they don't count (except on `ai.`, where each `i` is a new image)
 - Searches that find nothing count toward the limit. If the AI image served instead fails too, the failure is remembered for 24h (`bad.webp`)
 - A Cloudflare WAF burst limit applies to all requests (HTTP 429). Its counters are approximate (not shared perfectly across Cloudflare servers), so bursts may slip slightly past it
 
@@ -157,6 +158,7 @@ Limits change over time, so they aren't listed here. **Check the Rate Limits sec
 
 - Images are cached for **90 days**, including AI images
 - After expiry, the next request triggers a fresh search
+- A search's list of results is kept for **1 hour** (in SurrealDB), so the query's other `?i=` values don't search again
 - Images are stored in their original format as fetched from source (AI images are WebP)
 - A matching R2 lifecycle rule deletes stored objects after 90 days
 
@@ -269,15 +271,17 @@ Other keys share the namespace. They use uppercase prefixes, which can never col
 
 An AI image served because a search found nothing is stored under the search's own key, like any other image. A search where that also fails stores `{"t":…,"err":true}` for 24h.
 
-### Database: `SurrealDB` (Rate Limiting + Search Locks)
+### Database: `SurrealDB` (Rate Limiting, Search Locks + Result Lists)
 
 Using atomic database transactions over HTTP to track per-IP/per-day search frequencies securely and rapidly.
 
 The same transaction also claims a per-query lock (`lock:<sha256-of-KV-key>`, expires after 45s), so when several requests miss the cache for the same query at once (on any Cloudflare server), only one searches. The others wait for it to finish, then serve the image it stored in R2, and aren't counted toward the daily limit. The lock is deleted as soon as the result is stored.
 
+Each search also saves its result URLs as `results:<sha256 of site, src and query>` for 1 hour, with the indexes of the images that worked so far (`pos`) and the first URL not yet tried (`next`). The transaction returns that record when it exists, and then doesn't count the request. A `?i=` already in `pos` downloads only its own image, and a new one carries on from `next`, extending the record. Expired records are deleted by the same occasional cleanup as old rate counters.
+
 **Note:** This implementation is tested and verified for **SurrealDB v2.6.5**.
 
-After deploying, visit `https://<your-domain>/_setup` once. It creates the `direct_img` namespace, `rate_limit` database, `rate` table, an `updated_at` index (used by the cleanup query) and the `lock` table. It's idempotent, so visiting again is harmless, and it returns `{"ok":true}` on success.
+After deploying, visit `https://<your-domain>/_setup` once. It creates the `direct_img` namespace, `rate_limit` database, `rate` table, an `updated_at` index (used by the cleanup query), the `lock` table and the `results` table. It's idempotent, so visiting again is harmless, and it returns `{"ok":true}` on success.
 
 ---
 
@@ -286,7 +290,7 @@ After deploying, visit `https://<your-domain>/_setup` once. It creates the `dire
 - **Cloudflare Pages** — hosting + edge functions
 - **Cloudflare R2** — image storage
 - **Cloudflare KV** — generic lookups
-- **SurrealDB (v2.6.5)** — atomic rate limiting + search locks
+- **SurrealDB (v2.6.5)** — atomic rate limiting, search locks + cached result lists
 - **Cloudflare WAF** — layer 7 mitigation
 - **Brave Image Search API** — image sourcing
 - **Openverse API + Wikimedia Commons API** — free image sourcing

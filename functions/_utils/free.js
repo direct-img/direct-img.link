@@ -13,9 +13,8 @@ export function parseFreeSource(searchParams) {
   return src === "auto" || Object.hasOwn(SOURCES, src) ? src : null;
 }
 
-// Yields each source's image URLs in turn; a source is only searched once the previous one runs out
-export async function* freeImageUrls(query, src, env) {
-  for (const name of src === "auto" ? Object.keys(SOURCES) : [src]) {
-    yield* (await SOURCES[name](query, env, FREE_UA)) || [];
-  }
+// Every source's image URLs, one source after another. All are searched at once, since the whole list gets cached.
+export async function freeImageUrls(query, src, env) {
+  const names = src === "auto" ? Object.keys(SOURCES) : [src];
+  return (await Promise.all(names.map(n => SOURCES[n](query, env, FREE_UA)))).flatMap(urls => urls || []);
 }

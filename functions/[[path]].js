@@ -9,6 +9,8 @@ const TTL_SECONDS = 90 * 24 * 60 * 60;
 const MAX_INDEX = 20;
 // How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself
 const LOCK_SECONDS = 45;
+// How long a search's results are kept for the query's other ?i=, which then don't search again or count toward limits
+const LIST_SECONDS = 60 * 60;
 // Image candidates downloaded at once, so one slow or dead host doesn't stall the rest for its full 5s timeout
 const PARALLEL = 4;
 
@@ -53,6 +55,8 @@ export async function onRequest(context) {
   const cacheKey = site ? `${site.toUpperCase()}:${src}:${i}:${query}` : i === 1 ? query : `WEB:${i}:${query}`;
   const keyHash = await sha256(cacheKey);
   const r2Key = `${site ? `${site}/` : ""}${keyHash}`;
+  // A search's results are kept for LIST_SECONDS, so other ?i= of the same query skip the search. ai.* has no list.
+  const listHash = !ai && await sha256(["LIST", site, src, query].join(":"));
 
   const cached = await env.DIRECT_IMG_CACHE.get(cacheKey, "json");
   if (cached) {
@@ -70,7 +74,7 @@ export async function onRequest(context) {
   // free.* and ai.* get their own counters (prefixed so main-site ids stay unchanged) since they never spend Brave credits
   const rateId = await sha256(`${site ? `${site}:` : ""}${ip}:${today}`);
   const limit = free ? LIMITS.FREE_DAILY_LIMIT : ai ? LIMITS.AI_DAILY_LIMIT : LIMITS.DAILY_LIMIT;
-  let count = 1, wait = false, locked = false;
+  let count = 1, wait = false, locked = false, list = null;
 
   const db = env.SURREAL_URL && env.SURREAL_USER && env.SURREAL_PASS && (body => fetch(`${env.SURREAL_URL}/sql`, {
     method: "POST",
@@ -87,11 +91,13 @@ export async function onRequest(context) {
     // Counts the search and claims this query's lock in the same round trip, so concurrent misses (on any isolate or
     // colo) search once. A request that finds the lock held writes nothing and waits for the holder's result instead.
     // It's one transaction because a write conflict (e.g. same-IP misses at once) rolls it all back, so retrying is safe.
+    // It also fetches this query's cached results, if any, in which case the search is free and not counted.
     const sql = `BEGIN TRANSACTION;
+LET $l = ${listHash ? `(SELECT urls, pos, next FROM ONLY results:\`${listHash}\` WHERE exp > time::now())` : "NONE"};
 LET $w = lock:\`${keyHash}\`.exp > time::now();
-LET $c = IF !$w THEN (UPSERT ONLY rate:\`${rateId}\` SET count = IF count IS NONE THEN 1 ELSE count + 1 END, updated_at = time::now() RETURN VALUE count) END;
-IF !$w AND $c <= ${limit} THEN (UPSERT lock:\`${keyHash}\` SET exp = time::now() + ${LOCK_SECONDS}s) END;
-RETURN { count: $c, wait: $w };
+LET $c = IF !$w AND !$l THEN (UPSERT ONLY rate:\`${rateId}\` SET count = IF count IS NONE THEN 1 ELSE count + 1 END, updated_at = time::now() RETURN VALUE count) END;
+IF !$w AND ($l OR $c <= ${limit}) THEN (UPSERT lock:\`${keyHash}\` SET exp = time::now() + ${LOCK_SECONDS}s) END;
+RETURN { count: $c, wait: $w, list: $l };
 COMMIT TRANSACTION;`;
 
     try {
@@ -111,8 +117,8 @@ COMMIT TRANSACTION;`;
         try {
           const data = JSON.parse(rawText);
           if (data.every(s => s.status === "OK") && data.at(-1)?.result) {
-            ({ count, wait } = data.at(-1).result);
-            locked = !wait && count <= limit;
+            ({ count, wait, list } = data.at(-1).result);
+            locked = !wait && (!!list || count <= limit);
             break;
           }
           if (attempt < 3 && /conflict/i.test(rawText)) continue;
@@ -134,7 +140,7 @@ COMMIT TRANSACTION;`;
       }
 
       if (Math.random() < 0.05) {
-        context.waitUntil(db(`DELETE rate WHERE updated_at < time::now() - 25h; DELETE lock WHERE exp < time::now() - 1h;`).catch(() => {}));
+        context.waitUntil(db(`DELETE rate WHERE updated_at < time::now() - 25h; DELETE lock WHERE exp < time::now() - 1h; DELETE results WHERE exp < time::now();`).catch(() => {}));
       }
     } catch (err) {
       note({
@@ -170,7 +176,9 @@ COMMIT TRANSACTION;`;
     return asset("limit.webp");
   }
 
-  note({ title: `New ${label}Search`, message: `Query: ${query} (Search #${count} for ${ip})`, tags: "mag", priority: 2 });
+  note(list
+    ? { title: `New ${label}Search`, message: `Query: ${query} (from cached results, not counted, ${ip})`, tags: "mag,zap", priority: 1 }
+    : { title: `New ${label}Search`, message: `Query: ${query} (Search #${count} for ${ip})`, tags: "mag", priority: 2 });
 
   // Called once the result (image or error) is stored, so waiters serve it right away instead of at lock expiry
   const release = () => locked && context.waitUntil(db(`DELETE lock:\`${keyHash}\`;`).catch(() => {}));
@@ -206,35 +214,39 @@ COMMIT TRANSACTION;`;
       return asset("bad.webp");
     }
 
-    const imageUrls = free ? freeImageUrls(query, src, env) : webImageUrls(query, env, note);
+    // The query's cached results, or a fresh search. pos holds the indexes of the working images found so far and next
+    // the first URL not tried yet, so a known ?i= downloads only its own image and a new one carries on from next.
+    let { urls, pos, next } = list || { urls: await (free ? freeImageUrls(query, src, env) : webImageUrls(query, env, note)), pos: [], next: 0 };
+    // Starting at a known image skips the ones before it, so it can't add to pos
+    const known = pos.length >= i;
+    let at = known ? pos[i - 1] : next, found = known ? i - 1 : pos.length, imgResult = null, timedOut = false;
     const GLOBAL_DEADLINE = Date.now() + 20000;
-    let imgResult = null, tried = 0, found = 0, more = true, timedOut = false;
-    const failReasons = [], queue = [], abort = new AbortController(), it = imageUrls[Symbol.asyncIterator]();
+    const failReasons = [], queue = [], abort = new AbortController();
 
-    // Keeps up to PARALLEL downloads in flight, queued in result order
-    const fill = async () => {
-      while (more && queue.length < PARALLEL) {
-        const { value: imgUrl, done } = await it.next();
-        if (done) return void (more = false);
-        tried++;
+    // Keeps up to PARALLEL downloads in flight, queued in result order. A known ?i= expects its image to work, so it
+    // only downloads others once something fails.
+    const fill = () => {
+      while (!timedOut && at < urls.length && queue.length < (known && !failReasons.length ? 1 : PARALLEL)) {
         const remaining = GLOBAL_DEADLINE - Date.now();
-        if (remaining <= 500) return void (more = false, timedOut = true);
-        queue.push({ imgUrl, res: fetchImage(imgUrl, Math.min(remaining, 5000), free ? FREE_UA : undefined, abort.signal) });
+        if (remaining <= 500) timedOut = true;
+        else queue.push({ n: at, res: fetchImage(urls[at++], Math.min(remaining, 5000), free ? FREE_UA : undefined, abort.signal) });
       }
     };
 
     // Results are checked in order, so i still counts only images that download, and dead links and placeholders never
     // take up an index
-    while ((await fill(), queue.length)) {
-      const { imgUrl, res: pending } = queue.shift(), res = await pending;
+    while ((fill(), queue.length)) {
+      const { n, res: pending } = queue.shift(), res = await pending;
+      if (!known) next = n + 1;
       if (res.success) {
+        if (!known) pos.push(n);
         if (++found === i) {
           imgResult = res;
           break;
         }
       } else {
         try {
-          const host = new URL(imgUrl).hostname.replace(/^www\./, '');
+          const host = new URL(urls[n]).hostname.replace(/^www\./, '');
           failReasons.push(`${host}=${res.reason}`);
         } catch {
           failReasons.push(`invalid_url=${res.reason}`);
@@ -244,7 +256,14 @@ COMMIT TRANSACTION;`;
     abort.abort();
     if (timedOut) failReasons.push("Global timeout reached");
 
-    if (!tried) return await fail("Search Failed", `${free ? "No free results" : "Both Brave and Bing returned no results"} for: ${cacheKey}`, "question", 3);
+    // Saved even if no image worked, so other ?i= of the query don't search again, but not if the search found nothing,
+    // since that can also mean Brave and Bing failed. A cached list is only updated if this got further than its saver.
+    if (db && urls.length && next > (list ? list.next : -1)) context.waitUntil(db(list
+      ? `UPDATE results:\`${listHash}\` SET pos = ${JSON.stringify(pos)}, next = ${next} WHERE next < ${next};`
+      : `UPSERT results:\`${listHash}\` SET urls = ${JSON.stringify(urls)}, pos = ${JSON.stringify(pos)}, next = ${next}, exp = time::now() + ${LIST_SECONDS}s;`
+    ).catch(() => {}));
+
+    if (!urls.length) return await fail("Search Failed", `${free ? "No free results" : "Both Brave and Bing returned no results"} for: ${cacheKey}`, "question", 3);
     if (!imgResult) {
       const reasonStr = failReasons.slice(0, 6).join(", ") + (failReasons.length > 6 ? ", ..." : "");
       return await fail("Fetch Error (502)", `Found ${found} of ${i} working images for: ${cacheKey}\nReasons: ${reasonStr}`, "boom,x", 4);
@@ -262,12 +281,12 @@ function parseIndex(searchParams) {
   return /^\d+$/.test(i) && +i >= 1 && +i <= MAX_INDEX ? +i : null;
 }
 
-// Yields Brave results, or Bing's if Brave has none
-async function* webImageUrls(query, env, note) {
+// Brave results, or Bing's if Brave has none
+async function webImageUrls(query, env, note) {
   const urls = await braveImageSearch(query, env.BRAVE_API_KEY);
-  if (urls?.length) return yield* urls;
+  if (urls?.length) return urls;
   note({ title: "Brave Search Empty", message: `No results for: ${query}. Trying Bing Fallback.`, tags: "warning,mag", priority: 3 });
-  yield* (await bingImageSearchFallback(query)) || [];
+  return (await bingImageSearchFallback(query)) || [];
 }
 
 async function setupSurreal(env) {
@@ -278,7 +297,8 @@ DEFINE DATABASE IF NOT EXISTS rate_limit;
 USE DB rate_limit;
 DEFINE TABLE IF NOT EXISTS rate SCHEMALESS;
 DEFINE INDEX IF NOT EXISTS rate_updated_at ON rate FIELDS updated_at;
-DEFINE TABLE IF NOT EXISTS lock SCHEMALESS;`;
+DEFINE TABLE IF NOT EXISTS lock SCHEMALESS;
+DEFINE TABLE IF NOT EXISTS results SCHEMALESS;`;
   try {
     const res = await fetch(`${env.SURREAL_URL}/sql`, {
       method: "POST",
