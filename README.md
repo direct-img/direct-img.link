@@ -81,10 +81,11 @@ Literal slashes (`/`) and dots (`.`) in the URL path are **rejected** to prevent
 
 ### Things to know
 
-- **Query parameters (`?...`)** other than `i` (and `src` on [free.direct-img.link](#free-images)) serve `bad.webp` — `/orange+cat?size=large` ❌
+- **Query parameters (`?...`)** other than `i` (and `src` on [free.](#free-images) and [ai.direct-img.link](#ai-images)) serve `bad.webp` — `/orange+cat?size=large` ❌
 - **Fragments (`#...`)** are never sent to the server by browsers
 - **Double-encoded values** are decoded once — `%2520` becomes `%20` (literal), not a space
 - Two queries that normalize to the same string share the same cached image
+- **Nothing found?** If a search finds no image (or fewer than `i` working ones), an [AI image](#ai-images) of the query is served instead of `bad.webp`. It's kept for 24h, so a later search can still find a real one. `bad.webp` is only served if the AI image fails too
 
 ## Free Images
 
@@ -112,6 +113,26 @@ Need images you can publish? `free.direct-img.link` only serves images marked **
 
 Licenses come from each source's metadata and can be wrong. Check the original before publishing anything important.
 
+## AI Images
+
+`ai.direct-img.link` generates an image of anything instead of searching, so it never comes up empty. Same URL format, plus an optional `src`:
+
+```markdown
+![frog wizard](https://ai.direct-img.link/frog+wizard)
+![frog wizard](https://ai.direct-img.link/frog+wizard?i=2)
+![frog wizard](https://ai.direct-img.link/frog+wizard?src=auroraimg-6m&i=2)
+```
+
+| Param | Values | Default |
+|---|---|---|
+| `src` | `auroraimg-6m` (case-insensitive) | `auroraimg-6m` |
+| `i` | `1`–`20` — each is a different image of the same query | `1` |
+
+- The same query, `src` and `i` always give the same image
+- Invalid values serve `bad.webp`
+- Images come from [AuroraIMG-6M](https://github.com/direct-img/AuroraIMG-6M), a tiny 6.8M-parameter model running on our own server. They're 512px, soft and painterly: the right colors, setting and mood, but often not the exact object, and faces come out distorted
+- The same model makes the fallback images for searches that find nothing
+
 ## For AI System Prompts
 
 Add this to your system instructions:
@@ -127,16 +148,16 @@ Use images to complement your responses, powered by Brave.
 
 Limits change over time, so they aren't listed here. **Check the Rate Limits section on [direct-img.link](https://direct-img.link) for the current limits.**
 
-- **New searches (cache misses)** are limited per IP per day, then `limit.webp` is served. `direct-img.link` and `free.direct-img.link` have separate counters, both reset at midnight UTC
+- **New searches (cache misses)** are limited per IP per day, then `limit.webp` is served. `direct-img.link`, `free.direct-img.link` and `ai.direct-img.link` have separate counters, all reset at midnight UTC
 - **Cache hits are unlimited** (within the burst limit)
-- Failed searches count toward the limit and are remembered for 24h (`bad.webp`)
+- Searches that find nothing count toward the limit. The AI image served instead (or `bad.webp`, if that fails too) is kept for 24h
 - A Cloudflare WAF burst limit applies to all requests (HTTP 429). Its counters are approximate (not shared perfectly across Cloudflare servers), so bursts may slip slightly past it
 
 ## Caching
 
-- Images are cached for **90 days**
+- Images are cached for **90 days**, except AI images served because a search found nothing, which are kept for **24 hours**
 - After expiry, the next request triggers a fresh search
-- Images are stored in their original format as fetched from source
+- Images are stored in their original format as fetched from source (AI images are WebP)
 - A matching R2 lifecycle rule deletes stored objects after 90 days
 
 ## Support
@@ -207,6 +228,7 @@ Create in your Cloudflare dashboard:
 | `NTFY_URL` | ntfy.sh topic URL for alerts | Optional |
 | `GOATCOUNTER_URL` | GoatCounter site URL for image hit analytics (e.g. `https://direct-img.goatcounter.com`) | Optional |
 | `GOATCOUNTER_TOKEN` | GoatCounter API token with "Record pageviews" permission | Optional |
+| `AURORA_API_KEY` | Key for the [AuroraIMG-6M API](https://github.com/direct-img/AuroraIMG-6M) (AI images and the nothing-found fallback). Without it, `ai.` serves `bad.webp` and searches that find nothing serve `bad.webp` | Optional |
 
 ### 6. WAF Rules
 
@@ -218,9 +240,9 @@ Create in your Cloudflare dashboard:
 
 Fork this repo, connect to Cloudflare Pages, deploy.
 
-### 8. Free Images Domain
+### 8. Free and AI Images Domains
 
-**Pages project → Custom domains → Set up a domain:** add `free.<your-domain>`. Any hostname starting with `free.` serves free images; everything else serves regular search.
+**Pages project → Custom domains → Set up a domain:** add `free.<your-domain>` and `ai.<your-domain>`. Any hostname starting with `free.` serves free images, and any starting with `ai.` serves AI images; everything else serves regular search.
 
 ---
 
@@ -228,7 +250,7 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 
 ### R2: `direct-img-store`
 
-**Key:** `<sha256-of-KV-key>` (see below) — for a plain query with no `i`, that's the SHA-256 of the normalized query. Free images use `free/<sha256-of-KV-key>`. Derived from the request, no lookup needed. Stored with original content type from source.
+**Key:** `<sha256-of-KV-key>` (see below) — for a plain query with no `i`, that's the SHA-256 of the normalized query. Free images use `free/<sha256-of-KV-key>`, AI images `ai/<sha256-of-KV-key>`. Derived from the request, no lookup needed. Stored with original content type from source.
 
 Add an object lifecycle rule in **R2 → direct-img-store → Settings** that applies to all prefixes and deletes uploaded objects after **90 days**. This removes expired objects even when their query is never requested again.
 
@@ -242,7 +264,10 @@ Other keys share the namespace. They use uppercase prefixes, which can never col
 |---|---|---|
 | `WEB:<i>:<query>` — main site with `i` > 1 (e.g. `WEB:2:orange cat`) | Same as above | 90 days |
 | `FREE:<src or auto>:<i>:<query>` (e.g. `FREE:wikimedia:2:orange cat`) | Same as above | 90 days |
+| `AI:<src>:<i>:<query>` (e.g. `AI:auroraimg-6m:2:frog wizard`) | Same as above | 90 days |
 | `OPENVERSE_TOKEN` | Openverse access token | Token lifetime minus 10 min |
+
+An AI image served because a search found nothing is stored under the search's own key with `"ttl":86400` added to the value, and kept for 24h. A search where that also fails stores `{"t":…,"err":true}` for 24h.
 
 ### Database: `SurrealDB` (Rate Limiting + Search Locks)
 
@@ -265,6 +290,7 @@ After deploying, visit `https://<your-domain>/_setup` once. It creates the `dire
 - **Cloudflare WAF** — layer 7 mitigation
 - **Brave Image Search API** — image sourcing
 - **Openverse API + Wikimedia Commons API** — free image sourcing
+- **[AuroraIMG-6M](https://github.com/direct-img/AuroraIMG-6M) on Dokploy** — AI images and the nothing-found fallback
 
 ---
 

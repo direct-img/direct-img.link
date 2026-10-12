@@ -3,3 +3,4 @@
 // The burst limit (~10 req/10s) is a Cloudflare WAF rule, not set here.
 export const DAILY_LIMIT = 25;
 export const FREE_DAILY_LIMIT = 100;
+export const AI_DAILY_LIMIT = 100;

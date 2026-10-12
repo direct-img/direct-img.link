@@ -92,6 +92,24 @@ Use images to complement your responses, powered by Brave.</code></pre>
         </section>
 
         <section>
+            <h2>AI Images</h2>
+            <p><code>ai.direct-img.link</code> generates an image of anything instead of searching, so it never comes up empty. Expect soft, painterly, abstract results: the right colors and mood, not always the exact thing.</p>
+            <pre><code>![frog wizard](https://ai.direct-img.link/frog+wizard)
+![frog wizard](https://ai.direct-img.link/frog+wizard?i=2)
+![frog wizard](https://ai.direct-img.link/frog+wizard?src=auroraimg-6m&amp;i=2)</code></pre>
+            <table>
+                <thead>
+                    <tr><th>Param</th><th>Values</th><th>Default</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><code>src</code></td><td><code>auroraimg-6m</code></td><td><code>auroraimg-6m</code></td></tr>
+                    <tr><td><code>i</code></td><td><code>1</code>–<code>20</code> (a different image each)</td><td><code>1</code></td></tr>
+                </tbody>
+            </table>
+            <p style="font-size:0.85rem;color:var(--text-muted);">* The same query always gives the same image. When a search on direct-img.link or free.direct-img.link finds nothing, an AI image is served instead. Made with <a href="https://github.com/direct-img/AuroraIMG-6M">AuroraIMG-6M</a>.</p>
+        </section>
+
+        <section>
             <h2>Rate Limits</h2>
             <table>
                 <thead>
@@ -101,9 +119,10 @@ Use images to complement your responses, powered by Brave.</code></pre>
                     <tr><td>Burst</td><td>~10 req/10s per IP</td><td>HTTP 429 (~10s)</td></tr>
                     <tr><td>New Searches</td><td><span data-limit="DAILY_LIMIT">35</span> per day per IP</td><td>Limit image served</td></tr>
                     <tr><td>New Free Searches</td><td><span data-limit="FREE_DAILY_LIMIT">100</span> per day per IP</td><td>Limit image served</td></tr>
+                    <tr><td>New AI Images</td><td><span data-limit="AI_DAILY_LIMIT">100</span> per day per IP</td><td>Limit image served</td></tr>
                 </tbody>
             </table>
-            <p style="font-size:0.85rem;color:var(--text-muted);">* free.direct-img.link has its own daily limit, separate from the main site's. Cached images don't count toward it and keep loading after you hit it. The burst limit applies to all image requests and is enforced approximately. The daily limit resets at 00:00 UTC.</p>
+            <p style="font-size:0.85rem;color:var(--text-muted);">* free.direct-img.link and ai.direct-img.link each have their own daily limit, separate from the main site's. Cached images don't count toward it and keep loading after you hit it. The burst limit applies to all image requests and is enforced approximately. The daily limit resets at 00:00 UTC.</p>
         </section>
 
         <section>

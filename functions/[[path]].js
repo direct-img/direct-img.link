@@ -2,9 +2,12 @@ import { braveImageSearch } from "./_utils/brave.js";
 import { bingImageSearchFallback } from "./_utils/bing.js";
 import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
 import { isFlickrPlaceholder } from "./_utils/flickr.js";
+import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
 import * as LIMITS from "../assets/rate-limit.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
+// Failed searches, and the AI images served in their place, are kept for a day so a later search can still succeed
+const MISS_TTL_SECONDS = 24 * 60 * 60;
 const MAX_INDEX = 20;
 // How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself
 const LOCK_SECONDS = 45;
@@ -32,21 +35,24 @@ export async function onRequest(context) {
   if (!query) return jsonResponse(400, { error: "Empty query" });
   if (query.length > 200) return jsonResponse(400, { error: "Query too long (max 200 characters)" });
 
-  // ?i= picks which result to serve; free.direct-img.link also takes ?src= and serves only unrestricted images.
-  // Any other param (e.g. scanner probes like ?path=../../.env) is rejected before it can cost a search.
-  const free = url.hostname.startsWith("free.");
+  // ?i= picks which result to serve. free.direct-img.link serves only unrestricted images and ai.direct-img.link only
+  // AI-generated ones; both also take ?src=. Any other param (e.g. scanner probes like ?path=../../.env) is rejected
+  // before it can cost a search.
+  const site = ["free", "ai"].find(s => url.hostname.startsWith(`${s}.`)) || "";
+  const free = site === "free", ai = site === "ai";
+  const label = { free: "Free ", ai: "AI " }[site] || "";
   const i = parseIndex(url.searchParams);
-  const src = free ? parseFreeSource(url.searchParams) : null;
-  const extra = [...url.searchParams.keys()].some(k => k !== "i" && !(free && k === "src"));
-  if (!i || (free && !src) || extra) return asset("bad.webp");
+  const src = free ? parseFreeSource(url.searchParams) : ai ? parseAiSource(url.searchParams) : null;
+  const extra = [...url.searchParams.keys()].some(k => k !== "i" && !(site && k === "src"));
+  if (!i || (site && !src) || extra) return asset("bad.webp");
 
-  context.waitUntil(countHit(env, request, query, free));
+  context.waitUntil(countHit(env, request, query, site));
 
   // Main-site i=1 keeps the bare query so existing cache entries stay valid.
   // Other keys use uppercase prefixes, which can't collide with (always lowercased) queries.
-  const cacheKey = free ? `FREE:${src}:${i}:${query}` : i === 1 ? query : `WEB:${i}:${query}`;
+  const cacheKey = site ? `${site.toUpperCase()}:${src}:${i}:${query}` : i === 1 ? query : `WEB:${i}:${query}`;
   const keyHash = await sha256(cacheKey);
-  const r2Key = `${free ? "free/" : ""}${keyHash}`;
+  const r2Key = `${site ? `${site}/` : ""}${keyHash}`;
 
   const cached = await env.DIRECT_IMG_CACHE.get(cacheKey, "json");
   if (cached) {
@@ -54,16 +60,16 @@ export async function onRequest(context) {
     const obj = await env.R2_IMAGES.get(r2Key);
     if (obj) {
       const nowSec = Math.floor(Date.now() / 1000);
-      const remainingSec = Math.max(0, (cached.t + TTL_SECONDS) - nowSec);
+      const remainingSec = Math.max(0, (cached.t + (cached.ttl || TTL_SECONDS)) - nowSec);
       return new Response(obj.body, { headers: imageHeaders(cached.ct, remainingSec * 1000) });
     }
   }
 
   const ip = request.headers.get("cf-connecting-ip") || "unknown";
   const today = new Date().toISOString().slice(0, 10);
-  // free.* gets its own counter (prefixed so main-site ids stay unchanged) since it never spends Brave credits
-  const rateId = await sha256(`${free ? "free:" : ""}${ip}:${today}`);
-  const limit = free ? LIMITS.FREE_DAILY_LIMIT : LIMITS.DAILY_LIMIT;
+  // free.* and ai.* get their own counters (prefixed so main-site ids stay unchanged) since they never spend Brave credits
+  const rateId = await sha256(`${site ? `${site}:` : ""}${ip}:${today}`);
+  const limit = free ? LIMITS.FREE_DAILY_LIMIT : ai ? LIMITS.AI_DAILY_LIMIT : LIMITS.DAILY_LIMIT;
   let count = 1, wait = false, locked = false;
 
   const db = env.SURREAL_URL && env.SURREAL_USER && env.SURREAL_PASS && (body => fetch(`${env.SURREAL_URL}/sql`, {
@@ -150,28 +156,39 @@ COMMIT TRANSACTION;`;
   // Another request is already searching this query: wait for it to release the lock (or the lock to expire), then
   // serve what it stored. R2 is strongly consistent, unlike KV. Nothing stored means its search failed.
   if (wait) {
-    context.waitUntil(notify(env, { title: free ? "Free Search Deduped" : "Search Deduped", message: `Query: ${query} (waited for in-flight search, not counted, ${ip})\n${url.origin}/${path}${url.search}`, tags: "link", priority: 1 }));
+    context.waitUntil(notify(env, { title: `${label}Search Deduped`, message: `Query: ${query} (waited for in-flight search, not counted, ${ip})\n${url.origin}/${path}${url.search}`, tags: "link", priority: 1 }));
     for (const end = Date.now() + LOCK_SECONDS * 1000; Date.now() < end;) {
       await new Promise(r => setTimeout(r, 500));
       if (!await db(`RETURN lock:\`${keyHash}\`.exp > time::now();`).then(r => r.json()).then(d => d[0].result).catch(() => true)) break;
     }
     const obj = await env.R2_IMAGES.get(r2Key);
-    return obj ? new Response(obj.body, { headers: imageHeaders(obj.httpMetadata.contentType, TTL_SECONDS * 1000) }) : asset("bad.webp");
+    return obj ? new Response(obj.body, { headers: imageHeaders(obj.httpMetadata.contentType, (+obj.customMetadata?.ttl || TTL_SECONDS) * 1000) }) : asset("bad.webp");
   }
 
   if (count > limit) {
-    context.waitUntil(notify(env, { title: free ? "Free Rate Limit Hit" : "Rate Limit Hit", message: `IP ${ip} hit limit for: ${query}`, tags: "warning,no_entry", priority: 2 }));
+    context.waitUntil(notify(env, { title: `${label}Rate Limit Hit`, message: `IP ${ip} hit limit for: ${query}`, tags: "warning,no_entry", priority: 2 }));
     return asset("limit.webp");
   }
 
-  context.waitUntil(notify(env, { title: free ? "New Free Search" : "New Search", message: `Query: ${query} (Search #${count} for ${ip})\n${url.origin}/${path}${url.search}`, tags: "mag", priority: 2 }));
+  context.waitUntil(notify(env, { title: `New ${label}Search`, message: `Query: ${query} (Search #${count} for ${ip})\n${url.origin}/${path}${url.search}`, tags: "mag", priority: 2 }));
 
   // Called once the result (image or error) is stored, so waiters serve it right away instead of at lock expiry
   const release = () => locked && context.waitUntil(db(`DELETE lock:\`${keyHash}\`;`).catch(() => {}));
 
+  // ttl is stored with the image (KV and R2) so cache hits and deduped waiters send a matching max-age
+  const store = async ({ buffer, contentType }, ttl = TTL_SECONDS) => {
+    await env.R2_IMAGES.put(r2Key, buffer, { httpMetadata: { contentType }, customMetadata: { ttl: `${ttl}` } });
+    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: contentType, ...(ttl !== TTL_SECONDS && { ttl }) }), { expirationTtl: ttl });
+    release();
+    return new Response(buffer, { headers: imageHeaders(contentType, ttl * 1000) });
+  };
+
+  // Nothing found: serve an AI image of the query instead of bad.webp. bad.webp is only left for when that fails too.
   const fail = async (t, m, tag, p) => {
-    context.waitUntil(notify(env, { title: t, message: m, tags: tag, priority: p }));
-    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), err: true }), { expirationTtl: 86400 });
+    const fallback = await aiImage(DEFAULT_AI_SOURCE, query, i, env);
+    context.waitUntil(notify(env, { title: fallback.success ? `${t}, Served AI Image` : t, message: fallback.success ? m : `${m}\nAI fallback failed: ${fallback.reason}`, tags: tag, priority: p }));
+    if (fallback.success) return await store(fallback, MISS_TTL_SECONDS);
+    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), err: true }), { expirationTtl: MISS_TTL_SECONDS });
     release();
     return asset("bad.webp");
   };
@@ -180,6 +197,15 @@ COMMIT TRANSACTION;`;
   // reloading a slow page). Otherwise the runtime cancels it mid-search with the lock still held, and the reload waits
   // out LOCK_SECONDS only to find nothing stored and get bad.webp.
   const job = (async () => {
+    if (ai) {
+      const res = await aiImage(src, query, i, env);
+      if (res.success) return await store(res);
+      // Not cached, since it's likely temporary (busy or down), so the next request tries again
+      context.waitUntil(notify(env, { title: "AI Image Failed", message: `${src} failed for: ${cacheKey}\nReason: ${res.reason}`, tags: "boom,x", priority: 4 }));
+      release();
+      return asset("bad.webp");
+    }
+
     const imageUrls = free ? freeImageUrls(query, src, env) : webImageUrls(context, query);
     const GLOBAL_DEADLINE = Date.now() + 20000;
     let imgResult = null, tried = 0, found = 0, more = true, timedOut = false;
@@ -224,13 +250,7 @@ COMMIT TRANSACTION;`;
       return await fail("Fetch Error (502)", `Found ${found} of ${i} working images for: ${cacheKey}\nReasons: ${reasonStr}`, "boom,x", 4);
     }
 
-    const { buffer: imgBuffer, contentType: finalContentType } = imgResult;
-    await env.R2_IMAGES.put(r2Key, imgBuffer, { httpMetadata: { contentType: finalContentType } });
-
-    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: finalContentType }), { expirationTtl: TTL_SECONDS });
-    release();
-
-    return new Response(imgBuffer, { headers: imageHeaders(finalContentType, TTL_SECONDS * 1000) });
+    return await store(imgResult);
   })();
   context.waitUntil(job);
   return job;
@@ -283,14 +303,15 @@ async function notify(env,{ title, message, tags, priority }) {
   } catch {}
 }
 
-async function countHit(env, request, query, free) {
+// site is "free", "ai" or "" (main site); each is counted under its own path prefix
+async function countHit(env, request, query, site) {
   if (!env.GOATCOUNTER_URL || !env.GOATCOUNTER_TOKEN) return;
   const h = k => request.headers.get(k) || "";
   try {
     await fetch(`${env.GOATCOUNTER_URL}/api/v0/count`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.GOATCOUNTER_TOKEN}` },
-      body: JSON.stringify({ no_sessions: true, hits: [{ path: `${free ? "/free" : ""}/${query.replace(/ /g, "+")}`, title: query, ref: h("referer"), user_agent: h("user-agent"), ip: h("cf-connecting-ip") }] }),
+      body: JSON.stringify({ no_sessions: true, hits: [{ path: `${site ? `/${site}` : ""}/${query.replace(/ /g, "+")}`, title: query, ref: h("referer"), user_agent: h("user-agent"), ip: h("cf-connecting-ip") }] }),
       signal: AbortSignal.timeout(5000)
     });
   } catch {}
