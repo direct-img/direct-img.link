@@ -1,9 +1,11 @@
 export async function bingImageSearchFallback(query) {
   try {
-    const res = await fetch(`https://www.bing.com/images/search?q=${encodeURIComponent(query)}&safesearch=moderate`, {
-      headers: { 
+    // SafeSearch off, like Brave. The cookie is what actually sets it; adlt= alone is ignored.
+    const res = await fetch(`https://www.bing.com/images/search?q=${encodeURIComponent(query)}&adlt=off`, {
+      headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Cookie": "SRCHHPGUSR=ADLT=OFF"
       }
     });
     if (!res.ok) return null;
