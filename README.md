@@ -85,7 +85,7 @@ Literal slashes (`/`) and dots (`.`) in the URL path are **rejected** to prevent
 - **Fragments (`#...`)** are never sent to the server by browsers
 - **Double-encoded values** are decoded once — `%2520` becomes `%20` (literal), not a space
 - Two queries that normalize to the same string share the same cached image
-- **Nothing found?** If a search finds no image (or fewer than `i` working ones), an [AI image](#ai-images) of the query is served instead of `bad.webp`. It's kept for 24h, so a later search can still find a real one. `bad.webp` is only served if the AI image fails too
+- **Nothing found?** If a search finds no image (or fewer than `i` working ones), an [AI image](#ai-images) of the query is served instead of `bad.webp`, and cached like any other image. `bad.webp` is only served if the AI image fails too
 
 ## Free Images
 
@@ -150,12 +150,12 @@ Limits change over time, so they aren't listed here. **Check the Rate Limits sec
 
 - **New searches (cache misses)** are limited per IP per day, then `limit.webp` is served. `direct-img.link`, `free.direct-img.link` and `ai.direct-img.link` have separate counters, all reset at midnight UTC
 - **Cache hits are unlimited** (within the burst limit)
-- Searches that find nothing count toward the limit. The AI image served instead (or `bad.webp`, if that fails too) is kept for 24h
+- Searches that find nothing count toward the limit. If the AI image served instead fails too, the failure is remembered for 24h (`bad.webp`)
 - A Cloudflare WAF burst limit applies to all requests (HTTP 429). Its counters are approximate (not shared perfectly across Cloudflare servers), so bursts may slip slightly past it
 
 ## Caching
 
-- Images are cached for **90 days**, except AI images served because a search found nothing, which are kept for **24 hours**
+- Images are cached for **90 days**, including AI images
 - After expiry, the next request triggers a fresh search
 - Images are stored in their original format as fetched from source (AI images are WebP)
 - A matching R2 lifecycle rule deletes stored objects after 90 days
@@ -267,7 +267,7 @@ Other keys share the namespace. They use uppercase prefixes, which can never col
 | `AI:<src>:<i>:<query>` (e.g. `AI:auroraimg-6m:2:frog wizard`) | Same as above | 90 days |
 | `OPENVERSE_TOKEN` | Openverse access token | Token lifetime minus 10 min |
 
-An AI image served because a search found nothing is stored under the search's own key with `"ttl":86400` added to the value, and kept for 24h. A search where that also fails stores `{"t":…,"err":true}` for 24h.
+An AI image served because a search found nothing is stored under the search's own key, like any other image. A search where that also fails stores `{"t":…,"err":true}` for 24h.
 
 ### Database: `SurrealDB` (Rate Limiting + Search Locks)
 

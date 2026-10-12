@@ -6,8 +6,6 @@ import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
 import * as LIMITS from "../assets/rate-limit.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
-// Failed searches, and the AI images served in their place, are kept for a day so a later search can still succeed
-const MISS_TTL_SECONDS = 24 * 60 * 60;
 const MAX_INDEX = 20;
 // How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself
 const LOCK_SECONDS = 45;
@@ -60,7 +58,7 @@ export async function onRequest(context) {
     const obj = await env.R2_IMAGES.get(r2Key);
     if (obj) {
       const nowSec = Math.floor(Date.now() / 1000);
-      const remainingSec = Math.max(0, (cached.t + (cached.ttl || TTL_SECONDS)) - nowSec);
+      const remainingSec = Math.max(0, (cached.t + TTL_SECONDS) - nowSec);
       return new Response(obj.body, { headers: imageHeaders(cached.ct, remainingSec * 1000) });
     }
   }
@@ -162,7 +160,7 @@ COMMIT TRANSACTION;`;
       if (!await db(`RETURN lock:\`${keyHash}\`.exp > time::now();`).then(r => r.json()).then(d => d[0].result).catch(() => true)) break;
     }
     const obj = await env.R2_IMAGES.get(r2Key);
-    return obj ? new Response(obj.body, { headers: imageHeaders(obj.httpMetadata.contentType, (+obj.customMetadata?.ttl || TTL_SECONDS) * 1000) }) : asset("bad.webp");
+    return obj ? new Response(obj.body, { headers: imageHeaders(obj.httpMetadata.contentType, TTL_SECONDS * 1000) }) : asset("bad.webp");
   }
 
   if (count > limit) {
@@ -175,20 +173,20 @@ COMMIT TRANSACTION;`;
   // Called once the result (image or error) is stored, so waiters serve it right away instead of at lock expiry
   const release = () => locked && context.waitUntil(db(`DELETE lock:\`${keyHash}\`;`).catch(() => {}));
 
-  // ttl is stored with the image (KV and R2) so cache hits and deduped waiters send a matching max-age
-  const store = async ({ buffer, contentType }, ttl = TTL_SECONDS) => {
-    await env.R2_IMAGES.put(r2Key, buffer, { httpMetadata: { contentType }, customMetadata: { ttl: `${ttl}` } });
-    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: contentType, ...(ttl !== TTL_SECONDS && { ttl }) }), { expirationTtl: ttl });
+  const store = async ({ buffer, contentType }) => {
+    await env.R2_IMAGES.put(r2Key, buffer, { httpMetadata: { contentType } });
+    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: contentType }), { expirationTtl: TTL_SECONDS });
     release();
-    return new Response(buffer, { headers: imageHeaders(contentType, ttl * 1000) });
+    return new Response(buffer, { headers: imageHeaders(contentType, TTL_SECONDS * 1000) });
   };
 
-  // Nothing found: serve an AI image of the query instead of bad.webp. bad.webp is only left for when that fails too.
+  // Nothing found: serve an AI image of the query instead, cached like any other image. bad.webp (remembered for 24h)
+  // is only left for when that fails too.
   const fail = async (t, m, tag, p) => {
     const fallback = await aiImage(DEFAULT_AI_SOURCE, query, i, env);
     context.waitUntil(notify(env, { title: fallback.success ? `${t}, Served AI Image` : t, message: fallback.success ? m : `${m}\nAI fallback failed: ${fallback.reason}`, tags: tag, priority: p }));
-    if (fallback.success) return await store(fallback, MISS_TTL_SECONDS);
-    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), err: true }), { expirationTtl: MISS_TTL_SECONDS });
+    if (fallback.success) return await store(fallback);
+    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), err: true }), { expirationTtl: 86400 });
     release();
     return asset("bad.webp");
   };
