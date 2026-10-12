@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: September 26, 2026_
+_Last updated: October 12, 2026_
 
 direct-img.link has no accounts and doesn't sell data. This page explains what is collected when you use it.
 
@@ -28,10 +28,18 @@ We use [GoatCounter](https://www.goatcounter.com), a privacy-focused analytics s
 - Each image request is reported to GoatCounter from our servers, including the query, the referring page (for example, the site embedding the image), your user agent, and your IP address.
 - GoatCounter uses your IP address and user agent to work out your country, browser, and operating system, and to count unique visitors. It [doesn't store the IP address or user agent itself](https://www.goatcounter.com/help/sessions).
 
+## Newsletter
+
+- If you sign up for updates on the homepage, your email address, the sign-up date, and your IP address are stored by our newsletter service (newsletter.planetrenox.com, also run on Cloudflare) and used only to email you about direct-img.link.
+- The sign-up form uses [Cloudflare Turnstile](https://www.cloudflare.com/privacypolicy/) to block bots.
+- The maintainer gets a push notification (ntfy) with your email address when you sign up or unsubscribe.
+- Every email has an unsubscribe link. Unsubscribing stops all emails right away.
+
 ## Hosting and third parties
 
 - The service runs on Cloudflare, which processes all requests under its own [privacy policy](https://www.cloudflare.com/privacypolicy/).
 - The homepage embeds GitHub's Sponsor button, which is loaded from GitHub under GitHub's [privacy statement](https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement).
+- The homepage loads Cloudflare Turnstile for the newsletter sign-up form.
 - direct-img.link doesn't set any cookies.
 
 ## Changes

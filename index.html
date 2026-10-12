@@ -33,6 +33,13 @@
         .card{border:1px solid var(--border);padding:16px;border-radius:var(--radius);}
         .card h3{margin:0 0 8px 0;font-size:1rem;}
         .card p{margin:0;font-size:0.9rem;color:var(--text-muted);}
+        .sub{display:flex;flex-wrap:wrap;gap:8px;}
+        .sub input{flex:1;min-width:200px;font:inherit;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);color:var(--text);}
+        .sub input:focus{outline:none;border-color:var(--accent);}
+        .sub button{font:inherit;font-weight:600;padding:10px 20px;border:0;border-radius:var(--radius);background:var(--accent);color:#fff;cursor:pointer;}
+        .sub button:disabled{opacity:.6;cursor:default;}
+        .cf-turnstile{margin-top:8px;}
+        #sub-msg{margin:8px 0 0;font-size:0.9rem;}
         footer{width:100%;max-width:680px;padding:40px 24px;border-top:1px solid var(--border);color:var(--text-muted);font-size:0.9rem;display:flex;justify-content:space-between;margin-top:auto;}
         a{color:var(--accent);text-decoration:none;} a:hover{text-decoration:underline;}
         @media(max-width:600px){h1{font-size:2rem;}}
@@ -131,6 +138,20 @@ Use images to complement your responses, powered by Brave.</code></pre>
                 <p>Images are cached for 90 days. Subsequent requests for the same query are served instantly. Searches that find nothing serve an AI image instead, cached the same way.</p>
             </div>
         </section>
+
+        <section>
+            <h2>Get Updates</h2>
+            <p>Get an email when direct-img.link gets new features, sources, or higher limits. No spam.</p>
+            <form onsubmit="event.preventDefault();sub(this)">
+                <div class="sub">
+                    <input type="email" name="email" required placeholder="you@example.com" autocomplete="email" aria-label="Email address">
+                    <button type="submit">Sign up</button>
+                </div>
+                <div class="cf-turnstile" data-sitekey="0x4AAAAAAFG4HWETOcDDQ5vg" data-appearance="interaction-only" data-size="flexible"></div>
+                <p id="sub-msg" role="status"></p>
+            </form>
+            <p style="font-size:0.85rem;color:var(--text-muted);">* Unsubscribe anytime with the link in any email. We never share your email.</p>
+        </section>
     </main>
 
     <footer>
@@ -145,7 +166,24 @@ Use images to complement your responses, powered by Brave.</code></pre>
                 setTimeout(()=>b.textContent='Copy',1500);
             },()=>getSelection().selectAllChildren(p));
         };
+        const sub=async f=>{
+            const b=f.querySelector('button'),m=document.getElementById('sub-msg'),tok=()=>f.querySelector('[name=cf-turnstile-response]')?.value;
+            b.disabled=true;b.textContent='Signing up…';m.textContent='';
+            for(let i=0;i<50&&!tok();i++)await new Promise(r=>setTimeout(r,100));
+            let ok=false,e='Network error. Please try again.';
+            try{
+                const r=await fetch('https://newsletter.planetrenox.com/api/sub',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pool:'direct-img',email:f.email.value.trim(),token:tok()||''})}),d=await r.json();
+                ok=r.ok&&d.ok;
+                e={'invalid email':"That email doesn't look right.",'captcha failed':"Couldn't verify you're human. Please try again."}[d.error]??'Something went wrong. Please try again.';
+            }catch{}
+            m.textContent=ok?"You're signed up. Thanks!":e;
+            m.style.color=ok?'#1a7f37':'var(--warning)';
+            if(ok)f.reset();
+            window.turnstile?.reset();
+            b.disabled=false;b.textContent='Sign up';
+        };
     </script>
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
     <script type="module">
         import * as L from '/assets/rate-limit.js';
         for(const e of document.querySelectorAll('[data-limit]'))e.textContent=L[e.dataset.limit]??e.textContent;
