@@ -17,6 +17,8 @@ export async function onRequest(context) {
   const url = new URL(request.url);
   const path = params.path?.join("/") || "";
   const asset = f => env.ASSETS.fetch(new Request(new URL(`/assets/${f}`, url.origin)));
+  // Every alert ends with the full request URL (site, query, ?i= and ?src=), so it's clear which request triggered it
+  const note = n => context.waitUntil(notify(env, { ...n, message: `${n.message}\n${url.origin}/${path}${url.search}` }));
 
   // _routes.json serves these statically without invoking this function; kept as a fallback
   if (!path || path === "index.html" || path === "robots.txt" || path.startsWith("assets/")) {
@@ -98,12 +100,12 @@ COMMIT TRANSACTION;`;
         const rawText = await dbRes.text();
 
         if (!dbRes.ok) {
-          context.waitUntil(notify(env, {
+          note({
             title: "SurrealDB HTTP Error",
             message: `Status: ${dbRes.status}\nBody: ${rawText.slice(0, 500)}`,
             tags: "warning,x",
             priority: 4
-          }));
+          });
           break;
         }
         try {
@@ -114,19 +116,19 @@ COMMIT TRANSACTION;`;
             break;
           }
           if (attempt < 3 && /conflict/i.test(rawText)) continue;
-          context.waitUntil(notify(env, {
+          note({
             title: "SurrealDB Unexpected Result",
             message: `Response: ${rawText.slice(0, 500)}`,
             tags: "warning",
             priority: 3
-          }));
+          });
         } catch (parseErr) {
-          context.waitUntil(notify(env, {
+          note({
             title: "SurrealDB Parse Error",
             message: `Parse error: ${parseErr.message}\nRaw: ${rawText.slice(0, 500)}`,
             tags: "warning",
             priority: 4
-          }));
+          });
         }
         break;
       }
@@ -135,26 +137,26 @@ COMMIT TRANSACTION;`;
         context.waitUntil(db(`DELETE rate WHERE updated_at < time::now() - 25h; DELETE lock WHERE exp < time::now() - 1h;`).catch(() => {}));
       }
     } catch (err) {
-      context.waitUntil(notify(env, {
+      note({
         title: "SurrealDB Fetch Failed",
         message: `Error: ${err.message}\nURL: ${env.SURREAL_URL}`,
         tags: "boom,x",
         priority: 4
-      }));
+      });
     }
   } else {
-    context.waitUntil(notify(env, {
+    note({
       title: "SurrealDB Not Configured",
       message: `Missing: ${!env.SURREAL_URL ? 'SURREAL_URL ' : ''}${!env.SURREAL_USER ? 'SURREAL_USER ' : ''}${!env.SURREAL_PASS ? 'SURREAL_PASS' : ''}`,
       tags: "warning",
       priority: 4
-    }));
+    });
   }
 
   // Another request is already searching this query: wait for it to release the lock (or the lock to expire), then
   // serve what it stored. R2 is strongly consistent, unlike KV. Nothing stored means its search failed.
   if (wait) {
-    context.waitUntil(notify(env, { title: `${label}Search Deduped`, message: `Query: ${query} (waited for in-flight search, not counted, ${ip})\n${url.origin}/${path}${url.search}`, tags: "link", priority: 1 }));
+    note({ title: `${label}Search Deduped`, message: `Query: ${query} (waited for in-flight search, not counted, ${ip})`, tags: "link", priority: 1 });
     for (const end = Date.now() + LOCK_SECONDS * 1000; Date.now() < end;) {
       await new Promise(r => setTimeout(r, 500));
       if (!await db(`RETURN lock:\`${keyHash}\`.exp > time::now();`).then(r => r.json()).then(d => d[0].result).catch(() => true)) break;
@@ -164,11 +166,11 @@ COMMIT TRANSACTION;`;
   }
 
   if (count > limit) {
-    context.waitUntil(notify(env, { title: `${label}Rate Limit Hit`, message: `IP ${ip} hit limit for: ${query}`, tags: "warning,no_entry", priority: 2 }));
+    note({ title: `${label}Rate Limit Hit`, message: `IP ${ip} hit limit for: ${query}`, tags: "warning,no_entry", priority: 2 });
     return asset("limit.webp");
   }
 
-  context.waitUntil(notify(env, { title: `New ${label}Search`, message: `Query: ${query} (Search #${count} for ${ip})\n${url.origin}/${path}${url.search}`, tags: "mag", priority: 2 }));
+  note({ title: `New ${label}Search`, message: `Query: ${query} (Search #${count} for ${ip})`, tags: "mag", priority: 2 });
 
   // Called once the result (image or error) is stored, so waiters serve it right away instead of at lock expiry
   const release = () => locked && context.waitUntil(db(`DELETE lock:\`${keyHash}\`;`).catch(() => {}));
@@ -184,7 +186,7 @@ COMMIT TRANSACTION;`;
   // is only left for when that fails too.
   const fail = async (t, m, tag, p) => {
     const fallback = await aiImage(DEFAULT_AI_SOURCE, query, i, env);
-    context.waitUntil(notify(env, { title: fallback.success ? `${t}, Served AI Image` : t, message: fallback.success ? m : `${m}\nAI fallback failed: ${fallback.reason}`, tags: tag, priority: p }));
+    note({ title: fallback.success ? `${t}, Served AI Image` : t, message: fallback.success ? m : `${m}\nAI fallback failed: ${fallback.reason}`, tags: tag, priority: p });
     if (fallback.success) return await store(fallback);
     await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), err: true }), { expirationTtl: 86400 });
     release();
@@ -199,12 +201,12 @@ COMMIT TRANSACTION;`;
       const res = await aiImage(src, query, i, env);
       if (res.success) return await store(res);
       // Not cached, since it's likely temporary (busy or down), so the next request tries again
-      context.waitUntil(notify(env, { title: "AI Image Failed", message: `${src} failed for: ${cacheKey}\nReason: ${res.reason}`, tags: "boom,x", priority: 4 }));
+      note({ title: "AI Image Failed", message: `${src} failed for: ${cacheKey}\nReason: ${res.reason}`, tags: "boom,x", priority: 4 });
       release();
       return asset("bad.webp");
     }
 
-    const imageUrls = free ? freeImageUrls(query, src, env) : webImageUrls(context, query);
+    const imageUrls = free ? freeImageUrls(query, src, env) : webImageUrls(query, env, note);
     const GLOBAL_DEADLINE = Date.now() + 20000;
     let imgResult = null, tried = 0, found = 0, more = true, timedOut = false;
     const failReasons = [], queue = [], abort = new AbortController(), it = imageUrls[Symbol.asyncIterator]();
@@ -261,10 +263,10 @@ function parseIndex(searchParams) {
 }
 
 // Yields Brave results, or Bing's if Brave has none
-async function* webImageUrls(context, query) {
-  const urls = await braveImageSearch(query, context.env.BRAVE_API_KEY);
+async function* webImageUrls(query, env, note) {
+  const urls = await braveImageSearch(query, env.BRAVE_API_KEY);
   if (urls?.length) return yield* urls;
-  context.waitUntil(notify(context.env, { title: "Brave Search Empty", message: `No results for: ${query}. Trying Bing Fallback.`, tags: "warning,mag", priority: 3 }));
+  note({ title: "Brave Search Empty", message: `No results for: ${query}. Trying Bing Fallback.`, tags: "warning,mag", priority: 3 });
   yield* (await bingImageSearchFallback(query)) || [];
 }
 
