@@ -189,10 +189,10 @@ COMMIT TRANSACTION;`;
   };
 
   // Nothing found: serve an AI image of the query instead, cached like any other image. bad.webp (remembered for 24h)
-  // is only left for when that fails too.
+  // is only left for when that fails too, or for free.* with a ?src=, which asked for that source's images only.
   const fail = async (t, m, tag, p) => {
-    const fallback = await aiImage(DEFAULT_AI_SOURCE, query, i, env);
-    note({ title: fallback.success ? `${t}, Served AI Image` : t, message: fallback.success ? m : `${m}\nAI fallback failed: ${fallback.reason}`, tags: tag, priority: p });
+    const fallback = (!free || src === "auto") && await aiImage(DEFAULT_AI_SOURCE, query, i, env);
+    note({ title: fallback.success ? `${t}, Served AI Image` : t, message: fallback.success ? m : `${m}\n${fallback ? `AI fallback failed: ${fallback.reason}` : `No AI fallback with src=${src}`}`, tags: tag, priority: p });
     if (fallback.success) return await store(fallback);
     await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), err: true }), { expirationTtl: 86400 });
     release();

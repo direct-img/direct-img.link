@@ -44,7 +44,7 @@ https://direct-img.link/orange+cat?i=2
 - Leading zeros are ignored (`?i=02` = `?i=2`)
 - Only images that download count, so broken links and deleted photos are skipped and every `i` is a different image. `?i=2` is the 2nd working image
 - Higher `i` values take a little longer the first time, since the working images before it are downloaded to count them
-- If there aren't `i` working images, an [AI image](#ai-images) is served instead
+- If there aren't `i` working images, an [AI image](#ai-images) is served instead (except on [free.](#free-images) with a `src`, which serves `bad.webp`)
 - Each `i` is cached separately. A search's results are kept for **1 hour**, so other `i` values of the same query within that hour don't search again and **don't count toward the limit**. One that was already counted downloads only its own image
 
 ## Query Normalization
@@ -85,7 +85,7 @@ Literal slashes (`/`) and dots (`.`) in the URL path are **rejected** to prevent
 - **Fragments (`#...`)** are never sent to the server by browsers
 - **Double-encoded values** are decoded once — `%2520` becomes `%20` (literal), not a space
 - Two queries that normalize to the same string share the same cached image
-- **Nothing found?** If a search finds no image (or fewer than `i` working ones), an [AI image](#ai-images) of the query is served instead of `bad.webp`, and cached like any other image. `bad.webp` is only served if the AI image fails too
+- **Nothing found?** If a search finds no image (or fewer than `i` working ones), an [AI image](#ai-images) of the query is served instead of `bad.webp`, and cached like any other image. `bad.webp` is only served if the AI image fails too, or on [free.](#free-images) with a `src`
 - **Out of searches?** If Brave refuses (e.g. its monthly spending limit is reached), Bing is searched instead. If Bing is blocking us too, `donate.webp` is served instead of an AI image, and nothing is cached, so the query works again once either is back
 
 ## Free Images
@@ -105,6 +105,7 @@ Need images you can publish? `free.direct-img.link` only serves images marked **
 
 - Both are optional and can be used alone or together, in any order (`?i=2&src=wikimedia` = `?src=wikimedia&i=2`)
 - Invalid values serve `bad.webp`
+- With a `src`, only that source's images are served: if it has no image (or fewer than `i` working ones), `bad.webp` is served (remembered for 24h) instead of an AI image. Without one, an AI image is served like on the main site
 - Each `src` + `i` + query combination is cached separately. Like the main site, other `i` values within an hour of a search reuse its results and don't count as searches
 
 **Sources:**
@@ -153,7 +154,7 @@ Limits change over time, so they aren't listed here. **Check the Rate Limits sec
 - **Cache hits are unlimited** (within the burst limit)
 - Other `?i=` values of a query searched in the last hour reuse its results, so they don't count (except on `ai.`, where each `i` is a new image)
 - If Brave's spending limit is hit, searches use Bing; if Bing also blocks us, `donate.webp` is served (not cached)
-- Searches that find nothing count toward the limit. If the AI image served instead fails too, the failure is remembered for 24h (`bad.webp`)
+- Searches that find nothing count toward the limit. If the AI image served instead fails too (or there's none, on `free.` with a `src`), the failure is remembered for 24h (`bad.webp`)
 - A Cloudflare WAF burst limit applies to all requests (HTTP 429). Its counters are approximate (not shared perfectly across Cloudflare servers), so bursts may slip slightly past it
 
 ## Caching
@@ -272,7 +273,7 @@ Other keys share the namespace. They use uppercase prefixes, which can never col
 | `AI:<src>:<i>:<query>` (e.g. `AI:auroraimg-6m:2:frog wizard`) | Same as above | 90 days |
 | `OPENVERSE_TOKEN` | Openverse access token | Token lifetime minus 10 min |
 
-An AI image served because a search found nothing is stored under the search's own key, like any other image. A search where that also fails stores `{"t":…,"err":true}` for 24h.
+An AI image served because a search found nothing is stored under the search's own key, like any other image. A search where that also fails, or a `free.` search with a `src` (which gets no AI image), stores `{"t":…,"err":true}` for 24h.
 
 ### Database: `SurrealDB` (Rate Limiting, Search Locks + Result Lists)
 

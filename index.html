@@ -95,7 +95,7 @@ Use images to complement your responses, powered by Brave.</code></pre>
                     <tr><td><code>i</code></td><td><code>1</code>–<code>20</code> (which result)</td><td><code>1</code></td></tr>
                 </tbody>
             </table>
-            <p style="font-size:0.85rem;color:var(--text-muted);">* Both params are optional and work in any order. Licenses come from each source and can be wrong, so check the original before publishing. Images from <a href="https://openverse.org">Openverse</a> (made using the Openverse API, not endorsed or certified by Openverse) and <a href="https://commons.wikimedia.org">Wikimedia Commons</a>.</p>
+            <p style="font-size:0.85rem;color:var(--text-muted);">* Both params are optional and work in any order. With <code>src</code>, only that source's images are served, so if it has none you get <code>bad.webp</code> instead of an AI image. Licenses come from each source and can be wrong, so check the original before publishing. Images from <a href="https://openverse.org">Openverse</a> (made using the Openverse API, not endorsed or certified by Openverse) and <a href="https://commons.wikimedia.org">Wikimedia Commons</a>.</p>
         </section>
 
         <section>
@@ -113,7 +113,7 @@ Use images to complement your responses, powered by Brave.</code></pre>
                     <tr><td><code>i</code></td><td><code>1</code>–<code>20</code> (a different image each)</td><td><code>1</code></td></tr>
                 </tbody>
             </table>
-            <p style="font-size:0.85rem;color:var(--text-muted);">* The same query always gives the same image. When a search on direct-img.link or free.direct-img.link finds nothing, an AI image is served instead. Made with <a href="https://github.com/direct-img/AuroraIMG-6M">AuroraIMG-6M</a>.</p>
+            <p style="font-size:0.85rem;color:var(--text-muted);">* The same query always gives the same image. When a search on direct-img.link or free.direct-img.link (without <code>src</code>) finds nothing, an AI image is served instead. Made with <a href="https://github.com/direct-img/AuroraIMG-6M">AuroraIMG-6M</a>.</p>
         </section>
 
         <section>
