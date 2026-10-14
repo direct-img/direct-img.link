@@ -7,38 +7,29 @@
 <html>
 <head>
 <meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Figtree:wght@500;700;800&family=VT323&display=block" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Figtree:wght@500;700;800&display=block" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 900px; height: 382px; overflow: hidden; }
-  body { position: relative; background: #f5f0e6; font-family: Figtree, sans-serif; color: #23263a; }
+  body { position: relative; background: #fff; font-family: Figtree, sans-serif; color: #111; }
   svg.layer { position: absolute; inset: 0; }
 
-  .card {
-    position: absolute; left: 292px; top: 10px; width: 592px; height: 356px; padding: 16px 24px 0 26px;
-    background: #fffdf8; border: 2.5px solid #23263a; border-radius: 16px; box-shadow: 6px 6px 0 #23263a;
-  }
-  .tag {
-    display: inline-flex; align-items: center; gap: 7px; padding: 3px 12px 3px 10px; border-radius: 999px;
-    background: #fde2dc; border: 2px solid #23263a; font-weight: 800; font-size: 12.5px; letter-spacing: 1.3px;
-  }
-  .tag svg { width: 13px; height: 13px; }
-  h1 { margin: 6px 0 4px; font: 800 44px/1.04 "Bricolage Grotesque", sans-serif; letter-spacing: -.8px; }
-  p { color: #454a5c; font-weight: 500; font-size: 16px; line-height: 1.36; }
-  ul { list-style: none; margin: 7px 0 0; }
-  li { display: flex; align-items: center; gap: 10px; margin: 3px 0; font-weight: 700; font-size: 17px; }
-  li svg { flex: none; width: 20px; height: 20px; }
-  .so-far { margin: 8px 0 0; font-weight: 700; font-size: 17px; }
-  .so-far b { padding: 0 6px; background: #f6c945; border: 2px solid #23263a; border-radius: 6px; font-weight: 800; }
-  .cta { position: absolute; left: 26px; bottom: 16px; display: flex; align-items: center; gap: 20px; }
+  .text { position: absolute; left: 300px; top: 16px; width: 588px; height: 350px; }
+  h1 { margin: 0 0 6px; font: 800 54px/1.04 "Bricolage Grotesque", sans-serif; letter-spacing: -1px; }
+  p { color: #444; font-weight: 500; font-size: 19px; line-height: 1.32; }
+  ul { list-style: none; margin: 14px 0 0; }
+  li { display: flex; align-items: center; gap: 11px; margin: 7px 0; font-weight: 700; font-size: 19.5px; }
+  li svg { flex: none; width: 22px; height: 22px; }
+  .so-far { margin: 12px 0 0; font-weight: 700; font-size: 19.5px; }
+  .so-far b { padding: 1px 7px; background: #e6e6e6; border-radius: 6px; font-weight: 800; }
+  .cta { position: absolute; left: 0; bottom: 0; display: flex; align-items: center; gap: 20px; }
   .btn {
-    display: inline-flex; align-items: center; gap: 10px; padding: 10px 22px 11px 18px; border-radius: 12px; white-space: nowrap;
-    background: #e5533d; border: 2.5px solid #23263a; box-shadow: 4px 4px 0 #23263a;
-    color: #fff; font: 800 25px/1 "Bricolage Grotesque", sans-serif; letter-spacing: -.3px;
+    display: inline-flex; align-items: center; gap: 11px; padding: 12px 24px 13px 20px; border-radius: 12px; white-space: nowrap;
+    background: #111; color: #fff; font: 800 27px/1 "Bricolage Grotesque", sans-serif; letter-spacing: -.3px;
   }
-  .btn svg { width: 22px; height: 22px; }
-  .alt { color: #5d6173; font-weight: 500; font-size: 15px; line-height: 1.3; }
-  .alt b { color: #e5533d; font-weight: 800; }
+  .btn svg { width: 23px; height: 23px; }
+  .alt { color: #666; font-weight: 500; font-size: 17.5px; line-height: 1.3; }
+  .alt b { color: #111; font-weight: 800; }
 </style>
 </head>
 <body>
@@ -57,16 +48,16 @@
     <clipPath id="cBoots"><use href="#bootL"/><use href="#bootR"/></clipPath>
   </defs>
 
-  <ellipse cx="148" cy="352" rx="96" ry="9" fill="#e3d9c5"/>
+  <ellipse cx="148" cy="352" rx="96" ry="9" fill="#ececec"/>
 
-  <!-- Robot. Its antenna tip is the logo's link and its chest a donation counter stuck at $0. -->
-  <g stroke="#23263a" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
+  <!-- Robot. Its antenna tip is the logo's link and its chest the logo. -->
+  <g stroke="#111" stroke-width="3" stroke-linejoin="round" stroke-linecap="round">
     <!-- Legs and boots -->
-    <rect x="109" y="300" width="18" height="30" rx="5" fill="#3a4157"/>
-    <rect x="169" y="300" width="18" height="30" rx="5" fill="#3a4157"/>
+    <rect x="109" y="300" width="18" height="30" rx="5" fill="#3d3d3d"/>
+    <rect x="169" y="300" width="18" height="30" rx="5" fill="#3d3d3d"/>
     <g clip-path="url(#cBoots)" stroke="none">
-      <rect x="90" y="316" width="116" height="40" fill="#d6d9e4"/>
-      <use href="#bootL" fill="#fbfbfd" transform="translate(-5 -6)"/><use href="#bootR" fill="#fbfbfd" transform="translate(-5 -6)"/>
+      <rect x="90" y="316" width="116" height="40" fill="#d9d9d9"/>
+      <use href="#bootL" fill="#fff" transform="translate(-5 -6)"/><use href="#bootR" fill="#fff" transform="translate(-5 -6)"/>
     </g>
     <use href="#bootL" fill="none"/><use href="#bootR" fill="none"/>
     <path d="M94 350H142M154 350H202" stroke-width="6"/>
@@ -74,72 +65,71 @@
     <!-- Arms hang down: shoulder ball, upper arm, elbow, forearm, three-finger hand -->
     <g>
       <path d="M84 214 70 254M70 254 66 292" stroke-width="20"/>
-      <path d="M84 214 70 254M70 254 66 292" stroke="#fbfbfd" stroke-width="14"/>
-      <circle cx="70" cy="254" r="9" fill="#3a4157"/>
-      <path d="M54 300Q56 290 66 290 76 290 78 300L80 312 74 312 72 304 70 316 64 316 62 304 58 312 52 312Z" fill="#3a4157"/>
-      <circle cx="88" cy="206" r="14" fill="#3a4157"/>
+      <path d="M84 214 70 254M70 254 66 292" stroke="#fff" stroke-width="14"/>
+      <circle cx="70" cy="254" r="9" fill="#3d3d3d"/>
+      <path d="M54 300Q56 290 66 290 76 290 78 300L80 312 74 312 72 304 70 316 64 316 62 304 58 312 52 312Z" fill="#3d3d3d"/>
+      <circle cx="88" cy="206" r="14" fill="#3d3d3d"/>
     </g>
     <g>
       <path d="M212 214 226 254M226 254 230 292" stroke-width="20"/>
-      <path d="M212 214 226 254M226 254 230 292" stroke="#fbfbfd" stroke-width="14"/>
-      <circle cx="226" cy="254" r="9" fill="#3a4157"/>
-      <path d="M242 300Q240 290 230 290 220 290 218 300L216 312 222 312 224 304 226 316 232 316 234 304 238 312 244 312Z" fill="#3a4157"/>
-      <circle cx="208" cy="206" r="14" fill="#3a4157"/>
+      <path d="M212 214 226 254M226 254 230 292" stroke="#fff" stroke-width="14"/>
+      <circle cx="226" cy="254" r="9" fill="#3d3d3d"/>
+      <path d="M242 300Q240 290 230 290 220 290 218 300L216 312 222 312 224 304 226 316 232 316 234 304 238 312 244 312Z" fill="#3d3d3d"/>
+      <circle cx="208" cy="206" r="14" fill="#3d3d3d"/>
     </g>
 
     <!-- Body -->
     <g clip-path="url(#cBody)" stroke="none">
-      <rect x="80" y="170" width="140" height="150" fill="#d6d9e4"/>
-      <use href="#body" fill="#fbfbfd" transform="translate(-8 -7)"/>
+      <rect x="80" y="170" width="140" height="150" fill="#d9d9d9"/>
+      <use href="#body" fill="#fff" transform="translate(-8 -7)"/>
     </g>
     <use href="#body" fill="none"/>
     <path d="M92 288H204" stroke-width="2.2"/>
-    <rect x="110" y="206" width="76" height="48" rx="10" fill="#1d2233"/>
-    <text x="148" y="244" fill="#ffc94a" stroke="none" font-family="VT323" font-size="44" text-anchor="middle">$0</text>
-    <rect x="130" y="264" width="36" height="9" rx="4.5" fill="#1d2233"/>
-    <g fill="#23263a" stroke="none"><circle cx="102" cy="300" r="2.4"/><circle cx="194" cy="300" r="2.4"/></g>
+    <rect x="124" y="214" width="48" height="48" rx="13" fill="#fff" stroke-width="3.6"/>
+    <path d="M133 262 141 242.5l8 11.2 4-5.6 10.4 4" fill="none" stroke-width="3.6"/>
+    <use href="#link" fill="none" stroke-width="2" transform="translate(157 231) rotate(-45) scale(.95)"/>
+    <g fill="#111" stroke="none"><circle cx="102" cy="300" r="2.4"/><circle cx="194" cy="300" r="2.4"/></g>
 
     <!-- Neck -->
-    <rect x="132" y="168" width="32" height="24" rx="6" fill="#3a4157"/>
+    <rect x="132" y="168" width="32" height="24" rx="6" fill="#3d3d3d"/>
     <path d="M134 176H162M134 184H162" stroke-width="2"/>
 
     <!-- Head, tilted down to one side -->
     <g transform="rotate(-8 148 176)">
       <path d="M148 44V32C148 20 158 14 168 18" fill="none"/>
-      <use href="#link" fill="none" stroke="#0070f3" stroke-width="2.6" transform="translate(176 26) rotate(40) scale(2.2)"/>
-      <rect x="138" y="36" width="20" height="10" rx="3" fill="#ff7a45"/>
+      <use href="#link" fill="none" stroke="#111" stroke-width="2.6" transform="translate(176 26) rotate(40) scale(2.2)"/>
+      <rect x="138" y="36" width="20" height="10" rx="3" fill="#9a9a9a"/>
       <!-- Ear pods -->
-      <rect x="46" y="82" width="22" height="54" rx="9" fill="#ff7a45"/>
-      <rect x="228" y="82" width="22" height="54" rx="9" fill="#ff7a45"/>
+      <rect x="46" y="82" width="22" height="54" rx="9" fill="#9a9a9a"/>
+      <rect x="228" y="82" width="22" height="54" rx="9" fill="#9a9a9a"/>
       <path d="M53 98V120M61 98V120M235 98V120M243 98V120" stroke-width="2.2"/>
       <!-- Shell -->
       <g clip-path="url(#cHead)" stroke="none">
-        <rect x="56" y="40" width="184" height="140" fill="#d6d9e4"/>
-        <use href="#head" fill="#fbfbfd" transform="translate(-9 -9)"/>
+        <rect x="56" y="40" width="184" height="140" fill="#d9d9d9"/>
+        <use href="#head" fill="#fff" transform="translate(-9 -9)"/>
       </g>
       <use href="#head" fill="none"/>
       <!-- Visor with a reflection -->
-      <rect x="78" y="64" width="140" height="90" rx="34" fill="#1d2233"/>
+      <rect x="78" y="64" width="140" height="90" rx="34" fill="#1a1a1a"/>
       <path d="M92 96C94 80 104 72 120 70H132C114 74 104 82 100 98Z" fill="#fff" stroke="none" opacity=".18"/>
       <!-- Sad LED face: lids slope down to the outside, a small frown -->
-      <g fill="#6ee7ff" stroke="none">
+      <g fill="#f2f2f2" stroke="none">
         <path d="M110 108 132 100V118A11 11 0 0 1 110 118Z"/>
         <path d="M186 108 164 100V118A11 11 0 0 0 186 118Z"/>
       </g>
-      <path d="M137 141Q148 133 159 141" fill="none" stroke="#6ee7ff" stroke-width="3.2"/>
-      <g fill="#23263a" stroke="none"><circle cx="76" cy="160" r="2.4"/><circle cx="220" cy="160" r="2.4"/></g>
+      <path d="M137 141Q148 133 159 141" fill="none" stroke="#f2f2f2" stroke-width="3.2"/>
+      <g fill="#111" stroke="none"><circle cx="76" cy="160" r="2.4"/><circle cx="220" cy="160" r="2.4"/></g>
     </g>
   </g>
 </svg>
 
-<div class="card">
-  <div class="tag"><svg viewBox="0 0 26 25" fill="#e5533d"><use href="#heart"/></svg>SEARCH LIMIT REACHED</div>
+<div class="text">
   <h1>We've hit our limits</h1>
   <p>direct-img.link is free and runs on donations. Every new search costs us money, and we've used up our budget. Our backup search is turning us away too, so we can't find new images right now.</p>
   <ul>
-    <li><svg viewBox="0 0 26 25" fill="#e5533d"><use href="#heart"/></svg>Images we've already found still load as usual</li>
-    <li><svg viewBox="0 0 24 24" fill="none" stroke="#0070f3" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4.5h-4.5"/></svg>This resets on its own, so check back later</li>
-    <li><svg viewBox="0 0 24 24" fill="#f6c945" stroke="#23263a" stroke-width="1.6" stroke-linejoin="round"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.5L12 17.3l-5.9 3.2 1.3-6.5L2.5 9.4l6.6-.8Z"/></svg>Donations raise the limits for everyone</li>
+    <li><svg viewBox="0 0 26 25" fill="#111"><use href="#heart"/></svg>Images we've already found still load as usual</li>
+    <li><svg viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4.5h-4.5"/></svg>This resets on its own, so check back later</li>
+    <li><svg viewBox="0 0 24 24" fill="#111"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.5L12 17.3l-5.9 3.2 1.3-6.5L2.5 9.4l6.6-.8Z"/></svg>Donations raise the limits for everyone</li>
   </ul>
   <div class="so-far">So far, <b>$0</b> has been donated to direct-img.link.</div>
   <div class="cta">
