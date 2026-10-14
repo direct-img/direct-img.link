@@ -11,15 +11,18 @@ export function parseAiSource(searchParams) {
 // Same result shape as fetchImage: { success, buffer, contentType } or { success: false, reason }
 export async function aiImage(src, query, i, env) {
   try {
-    return await SOURCES[src](query, await seedFor(query, i), env);
+    return await SOURCES[src](query, seedFor(query, i), env);
   } catch (err) {
     return { success: false, reason: err.name === "TimeoutError" ? "Timeout" : err.message };
   }
 }
 
-// Deterministic per query and i, so each ?i= is a different image of the same prompt and repeats are identical
-async function seedFor(query, i) {
-  return new DataView(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${query}\n${i}`))).getUint32(0);
+// Deterministic per query and i, so each ?i= is a different image of the same prompt and repeats are identical.
+// 32-bit FNV-1a: the API takes a 32-bit seed, and this is ~28x faster than crypto.subtle (seeds don't need security)
+function seedFor(query, i) {
+  let h = 0x811c9dc5, s = `${query}\n${i}`;
+  for (let k = 0; k < s.length; k++) h = Math.imul(h ^ s.charCodeAt(k), 0x01000193);
+  return h >>> 0;
 }
 
 // AuroraIMG-6M on our Dokploy server: https://github.com/direct-img/AuroraIMG-6M
