@@ -40,7 +40,7 @@ Add `?i=` to serve a later search result instead of the first, e.g. when the fir
 https://direct-img.link/orange+cat?i=2
 ```
 
-- `i` is `1`–`40`, default `1`. Invalid values serve `bad.webp`
+- `i` is `1`–`40`, default `1`. Higher values serve `max-i.webp`, which lists each site's range, and other invalid values serve `bad.webp`
 - Leading zeros are ignored (`?i=02` = `?i=2`)
 - Only images that download count, so broken links and deleted photos are skipped and every `i` is a different image. `?i=2` is the 2nd working image
 - Higher `i` values take a little longer the first time, since the working images before it are downloaded to count them
@@ -104,7 +104,7 @@ Need images you can publish? `free.direct-img.link` only serves images marked **
 | `i` | `1`–`20` — works the same as [on the main site](#picking-a-result) | `1` |
 
 - Both are optional and can be used alone or together, in any order (`?i=2&src=wikimedia` = `?src=wikimedia&i=2`)
-- Invalid values serve `bad.webp`
+- `i` above `20` serves `max-i.webp`, which lists each site's range. Other invalid values serve `bad.webp`
 - With a `src`, only that source's images are served: if it has no image (or fewer than `i` working ones), `bad.webp` is served (remembered for 24h) instead of an AI image. Without one, an AI image is served like on the main site
 - Each `src` + `i` + query combination is cached separately. Like the main site, other `i` values within an hour of a search reuse its results and don't count as searches
 
@@ -128,10 +128,10 @@ Licenses come from each source's metadata and can be wrong. Check the original b
 | Param | Values | Default |
 |---|---|---|
 | `src` | `auroraimg-6m` (case-insensitive) | `auroraimg-6m` |
-| `i` | `1`–`20` — each is a different image of the same query | `1` |
+| `i` | `1`–`1000` — each is a different image of the same query | `1` |
 
 - The same query, `src` and `i` always give the same image
-- Invalid values serve `bad.webp`
+- `i` above `1000` serves `max-i.webp`, which lists each site's range. Other invalid values serve `bad.webp`
 - Images come from [AuroraIMG-6M](https://github.com/direct-img/AuroraIMG-6M), a tiny 6.8M-parameter model running on our own server. They're 512px, soft and painterly: the right colors, setting and mood, but often not the exact object, and faces come out distorted
 - The same model makes the fallback images for searches that find nothing
 

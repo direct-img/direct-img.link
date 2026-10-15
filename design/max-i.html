@@ -1,0 +1,38 @@
+<!doctype html>
+<!--
+  Source of assets/max-i.webp, served when ?i= is past the site's highest. Keep the ranges in sync with MAX_INDEX in
+  functions/[[path]].js. Render at 900x382 with:
+  chrome --headless --no-sandbox --hide-scrollbars --force-device-scale-factor=1 --window-size=900,382 --virtual-time-budget=8000 --screenshot=max-i.png design/max-i.html
+  ffmpeg -i max-i.png -c:v libwebp -quality 90 -compression_level 6 assets/max-i.webp
+-->
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Figtree:wght@500;800&display=block" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 900px; height: 382px; overflow: hidden; }
+  body { display: flex; align-items: center; gap: 52px; padding-left: 96px; background: #fff; font-family: Figtree, sans-serif; color: #111; }
+  .icon {
+    flex: none; display: grid; place-items: center; width: 170px; height: 170px; border: 15px solid #1a1a1a; border-radius: 42px;
+    font: 800 60px/1 "Bricolage Grotesque", sans-serif; letter-spacing: -1px;
+  }
+  h1 { margin-bottom: 16px; font: 800 50px/1.04 "Bricolage Grotesque", sans-serif; letter-spacing: -1px; }
+  table { border-collapse: collapse; font-size: 21px; }
+  td { padding: 5px 0; }
+  td:first-child { padding-right: 28px; color: #444; font-weight: 500; }
+  b { padding: 1px 8px; background: #e6e6e6; border-radius: 6px; font-weight: 800; }
+</style>
+</head>
+<body>
+<div class="icon">?i=</div>
+<div>
+  <h1>That ?i= is too high</h1>
+  <table>
+    <tr><td>direct-img.link</td><td><b>1–40</b></td></tr>
+    <tr><td>free.direct-img.link</td><td><b>1–20</b></td></tr>
+    <tr><td>ai.direct-img.link</td><td><b>1–1000</b></td></tr>
+  </table>
+</div>
+</body>
+</html>

@@ -6,8 +6,10 @@ import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
 import * as LIMITS from "../assets/rate-limit.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
-// Highest ?i= per site: 40 on the main site (100 Brave results), 20 on free.* (~50 Openverse + Wikimedia results) and ai.*
-const MAX_INDEX = { "": 40, free: 20, ai: 20 };
+// Highest ?i= per site: 40 on the main site (100 Brave results), 20 on free.* (~50 Openverse + Wikimedia
+// results) and 1000 on ai.* (each is a new image, so there's no list to run out).
+// Higher values serve max-i.webp, which lists these, so redraw it from design/max-i.html when they change.
+const MAX_INDEX = { "": 40, free: 20, ai: 1000 };
 // How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself
 const LOCK_SECONDS = 45;
 // How long a search's results are kept for the query's other ?i=, which then don't search again or count toward limits
@@ -44,10 +46,11 @@ export async function onRequest(context) {
   const site = ["free", "ai"].find(s => url.hostname.startsWith(`${s}.`)) || "";
   const free = site === "free", ai = site === "ai";
   const label = { free: "Free ", ai: "AI " }[site] || "";
-  const i = parseIndex(url.searchParams, MAX_INDEX[site]);
+  const i = parseIndex(url.searchParams);
   const src = free ? parseFreeSource(url.searchParams) : ai ? parseAiSource(url.searchParams) : null;
   const extra = [...url.searchParams.keys()].some(k => k !== "i" && !(site && k === "src"));
   if (!i || (site && !src) || extra) return asset("bad.webp");
+  if (i > MAX_INDEX[site]) return asset("max-i.webp");
 
   context.waitUntil(countHit(env, request, query, site));
 
@@ -279,10 +282,10 @@ COMMIT TRANSACTION;`;
   return job;
 }
 
-// ?i=1..max (default 1). Returns null if invalid.
-function parseIndex(searchParams, max) {
+// ?i=1 or higher (default 1). Returns null if invalid.
+function parseIndex(searchParams) {
   const i = searchParams.get("i") || "1";
-  return /^\d+$/.test(i) && +i >= 1 && +i <= max ? +i : null;
+  return /^\d+$/.test(i) && +i >= 1 ? +i : null;
 }
 
 // Brave results, or Bing's if Brave has none or refuses (e.g. once its spending limit is hit). null if Bing fails too,
