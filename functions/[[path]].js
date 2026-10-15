@@ -6,7 +6,8 @@ import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
 import * as LIMITS from "../assets/rate-limit.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
-const MAX_INDEX = 20;
+// Highest ?i= per site: 40 on the main site (100 Brave results), 20 on free.* (~50 Openverse + Wikimedia results) and ai.*
+const MAX_INDEX = { "": 40, free: 20, ai: 20 };
 // How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself
 const LOCK_SECONDS = 45;
 // How long a search's results are kept for the query's other ?i=, which then don't search again or count toward limits
@@ -43,7 +44,7 @@ export async function onRequest(context) {
   const site = ["free", "ai"].find(s => url.hostname.startsWith(`${s}.`)) || "";
   const free = site === "free", ai = site === "ai";
   const label = { free: "Free ", ai: "AI " }[site] || "";
-  const i = parseIndex(url.searchParams);
+  const i = parseIndex(url.searchParams, MAX_INDEX[site]);
   const src = free ? parseFreeSource(url.searchParams) : ai ? parseAiSource(url.searchParams) : null;
   const extra = [...url.searchParams.keys()].some(k => k !== "i" && !(site && k === "src"));
   if (!i || (site && !src) || extra) return asset("bad.webp");
@@ -278,10 +279,10 @@ COMMIT TRANSACTION;`;
   return job;
 }
 
-// ?i=1..MAX_INDEX (default 1). Returns null if invalid.
-function parseIndex(searchParams) {
+// ?i=1..max (default 1). Returns null if invalid.
+function parseIndex(searchParams, max) {
   const i = searchParams.get("i") || "1";
-  return /^\d+$/.test(i) && +i >= 1 && +i <= MAX_INDEX ? +i : null;
+  return /^\d+$/.test(i) && +i >= 1 && +i <= max ? +i : null;
 }
 
 // Brave results, or Bing's if Brave has none or refuses (e.g. once its spending limit is hit). null if Bing fails too,

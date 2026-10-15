@@ -2,7 +2,8 @@ const API = "https://api.openverse.org/v1";
 // Uppercase so it can't collide with query cache keys, which are always lowercased
 const TOKEN_KEY = "OPENVERSE_TOKEN";
 
-// Tokens expire (~12h); client ID/secret are permanent, so fetch a new token whenever the cached one is gone
+// Tokens expire (~12h); client ID/secret are permanent, so fetch a new token whenever the cached one is gone.
+// Production has OPENVERSE_CLIENT_ID/SECRET set, so its requests are authenticated.
 async function getToken(env) {
   if (!env.OPENVERSE_CLIENT_ID || !env.OPENVERSE_CLIENT_SECRET) return null;
   const cached = await env.DIRECT_IMG_CACHE.get(TOKEN_KEY);

@@ -40,7 +40,7 @@ Add `?i=` to serve a later search result instead of the first, e.g. when the fir
 https://direct-img.link/orange+cat?i=2
 ```
 
-- `i` is `1`–`20`, default `1`. Invalid values serve `bad.webp`
+- `i` is `1`–`40`, default `1`. Invalid values serve `bad.webp`
 - Leading zeros are ignored (`?i=02` = `?i=2`)
 - Only images that download count, so broken links and deleted photos are skipped and every `i` is a different image. `?i=2` is the 2nd working image
 - Higher `i` values take a little longer the first time, since the working images before it are downloaded to count them
