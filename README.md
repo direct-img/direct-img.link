@@ -272,6 +272,7 @@ Other keys share the namespace. They use uppercase prefixes, which can never col
 | `FREE:<src or auto>:<i>:<query>` (e.g. `FREE:wikimedia:2:orange cat`) | Same as above | 90 days |
 | `AI:<src>:<i>:<query>` (e.g. `AI:auroraimg-6m:2:frog wizard`) | Same as above | 90 days |
 | `OPENVERSE_TOKEN` | Openverse access token | Token lifetime minus 10 min |
+| `SURREAL_TOKEN` | SurrealDB access token, sent instead of the password, which SurrealDB takes ~50ms to check on every request | Token lifetime minus 10 min |
 
 An AI image served because a search found nothing is stored under the search's own key, like any other image. A search where that also fails, or a `free.` search with a `src` (which gets no AI image), stores `{"t":…,"err":true}` for 24h.
 

@@ -3,6 +3,7 @@ import { bingImageSearchFallback } from "./_utils/bing.js";
 import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
 import { isFlickrPlaceholder } from "./_utils/flickr.js";
 import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
+import { surreal } from "./_utils/surreal.js";
 import * as LIMITS from "../assets/rate-limit.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
@@ -80,16 +81,7 @@ export async function onRequest(context) {
   const limit = free ? LIMITS.FREE_DAILY_LIMIT : ai ? LIMITS.AI_DAILY_LIMIT : LIMITS.DAILY_LIMIT;
   let count = 1, wait = false, locked = false, list = null;
 
-  const db = env.SURREAL_URL && env.SURREAL_USER && env.SURREAL_PASS && (body => fetch(`${env.SURREAL_URL}/sql`, {
-    method: "POST",
-    headers: {
-      "Accept": "application/json",
-      "Authorization": `Basic ${btoa(`${env.SURREAL_USER}:${env.SURREAL_PASS}`)}`,
-      "surreal-ns": "direct_img",
-      "surreal-db": "rate_limit",
-    },
-    body
-  }));
+  const db = surreal(env);
 
   if (db) {
     // Counts the search and claims this query's lock in the same round trip, so concurrent misses (on any isolate or
