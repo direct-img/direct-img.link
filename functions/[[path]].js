@@ -7,6 +7,8 @@ import { surreal } from "./_utils/surreal.js";
 import * as LIMITS from "../assets/rate-limit.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
+// How long a failed search keeps serving bad.webp before the query is searched again
+const ERR_SECONDS = 24 * 60 * 60;
 // Highest ?i= per site: 40 on the main site (100 Brave results), 20 on free.* (~50 Openverse + Wikimedia
 // results) and 1000 on ai.* (each is a new image, so there's no list to run out).
 // Higher values serve max-i.webp, which lists these, so redraw it from design/max-i.html when they change.
@@ -63,15 +65,13 @@ export async function onRequest(context) {
   // A search's results are kept for LIST_SECONDS, so other ?i= of the same query skip the search. ai.* has no list.
   const listHash = !ai && await sha256(["LIST", site, src, query].join(":"));
 
-  const cached = await env.DIRECT_IMG_CACHE.get(cacheKey, "json");
-  if (cached) {
-    if (cached.err) return asset("bad.webp");
-    const obj = await env.R2_IMAGES.get(r2Key);
-    if (obj) {
-      const nowSec = Math.floor(Date.now() / 1000);
-      const remainingSec = Math.max(0, (cached.t + TTL_SECONDS) - nowSec);
-      return new Response(obj.body, { headers: imageHeaders(cached.ct, remainingSec * 1000) });
-    }
+  // R2 keeps each image with its type and upload time, so a cached one takes this single lookup. A failed search leaves
+  // an empty object marked err instead. The bucket's lifecycle rule deletes both after TTL_SECONDS.
+  const hit = await env.R2_IMAGES.get(r2Key);
+  if (hit) {
+    const age = Date.now() - hit.uploaded.getTime();
+    if (!hit.customMetadata?.err) return new Response(hit.body, { headers: imageHeaders(hit.httpMetadata.contentType, TTL_SECONDS * 1000 - age) });
+    if (age < ERR_SECONDS * 1000) return asset("bad.webp");
   }
 
   const ip = request.headers.get("cf-connecting-ip") || "unknown";
@@ -156,7 +156,7 @@ COMMIT TRANSACTION;`;
   }
 
   // Another request is already searching this query: wait for it to release the lock (or the lock to expire), then
-  // serve what it stored. R2 is strongly consistent, unlike KV. Nothing stored means its search failed.
+  // serve what it stored. R2 is strongly consistent. Nothing stored (or an err marker) means its search failed.
   if (wait) {
     note({ title: `${label}Search Deduped`, message: `Query: ${query} (waited for in-flight search, not counted, ${ip})`, tags: "link", priority: 1 });
     for (const end = Date.now() + LOCK_SECONDS * 1000; Date.now() < end;) {
@@ -164,7 +164,7 @@ COMMIT TRANSACTION;`;
       if (!await db(`RETURN lock:\`${keyHash}\`.exp > time::now();`).then(r => r.json()).then(d => d[0].result).catch(() => true)) break;
     }
     const obj = await env.R2_IMAGES.get(r2Key);
-    return obj ? new Response(obj.body, { headers: imageHeaders(obj.httpMetadata.contentType, TTL_SECONDS * 1000) }) : asset("bad.webp");
+    return obj && !obj.customMetadata?.err ? new Response(obj.body, { headers: imageHeaders(obj.httpMetadata.contentType, TTL_SECONDS * 1000) }) : asset("bad.webp");
   }
 
   if (count > limit) {
@@ -179,18 +179,17 @@ COMMIT TRANSACTION;`;
 
   const store = async ({ buffer, contentType }) => {
     await env.R2_IMAGES.put(r2Key, buffer, { httpMetadata: { contentType } });
-    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), ct: contentType }), { expirationTtl: TTL_SECONDS });
     release();
     return new Response(buffer, { headers: imageHeaders(contentType, TTL_SECONDS * 1000) });
   };
 
-  // Nothing found: serve an AI image of the query instead, cached like any other image. bad.webp (remembered for 24h)
-  // is only left for when that fails too, or for free.* with a ?src=, which asked for that source's images only.
+  // Nothing found: serve an AI image of the query instead, cached like any other image. bad.webp (kept ERR_SECONDS) is
+  // only left for when that fails too, or for free.* with a ?src=, which asked for that source's images only.
   const fail = async (t, m, tag, p) => {
     const fallback = (!free || src === "auto") && await aiImage(DEFAULT_AI_SOURCE, query, i, env);
     note({ title: fallback.success ? `${t}, Served AI Image` : t, message: fallback.success ? m : `${m}\n${fallback ? `AI fallback failed: ${fallback.reason}` : `No AI fallback with src=${src}`}`, tags: tag, priority: p });
     if (fallback.success) return await store(fallback);
-    await env.DIRECT_IMG_CACHE.put(cacheKey, JSON.stringify({ t: Math.floor(Date.now() / 1000), err: true }), { expirationTtl: 86400 });
+    await env.R2_IMAGES.put(r2Key, "", { customMetadata: { err: "1" } });
     release();
     return asset("bad.webp");
   };

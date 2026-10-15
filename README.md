@@ -163,7 +163,7 @@ Limits change over time, so they aren't listed here. **Check the Rate Limits sec
 - After expiry, the next request triggers a fresh search
 - A search's list of results is kept for **1 hour** (in SurrealDB), so the query's other `?i=` values don't search again
 - Images are stored in their original format as fetched from source (AI images are WebP)
-- A matching R2 lifecycle rule deletes stored objects after 90 days
+- The R2 lifecycle rule that deletes objects after 90 days is what expires them, since the code never deletes images
 
 ## Support
 
@@ -208,7 +208,7 @@ Create in your Cloudflare dashboard:
 | Resource | Name | Purpose |
 |---|---|---|
 | R2 Bucket | `direct-img-store` | Stores cached images |
-| KV Namespace | `DIRECT_IMG_CACHE` | Cache existence + content type + timestamp |
+| KV Namespace | `DIRECT_IMG_CACHE` | Openverse and SurrealDB access tokens |
 
 ### 4. Pages Bindings
 
@@ -256,31 +256,35 @@ Fork this repo, connect to Cloudflare Pages, deploy.
 
 ### R2: `direct-img-store`
 
-**Key:** `<sha256-of-KV-key>` (see below) — for a plain query with no `i`, that's the SHA-256 of the normalized query. Free images use `free/<sha256-of-KV-key>`, AI images `ai/<sha256-of-KV-key>`. Derived from the request, no lookup needed. Stored with original content type from source.
+**Key:** `<sha256-of-cache-key>` — for a plain query with no `i`, that's the SHA-256 of the normalized query. Free images use `free/<sha256-of-cache-key>`, AI images `ai/<sha256-of-cache-key>`. Derived from the request, no lookup needed. Stored with original content type from source.
 
-Add an object lifecycle rule in **R2 → direct-img-store → Settings** that applies to all prefixes and deletes uploaded objects after **90 days**. This removes expired objects even when their query is never requested again.
+Every request looks up its key here first, and a cached image is served from that one lookup: its content type and upload time (which sets the remaining `Cache-Control` max-age) are stored with it.
+
+| Cache key | For |
+|---|---|
+| normalized query (lowercase, trimmed, max 200 chars) | main site, `i` = 1 |
+| `WEB:<i>:<query>` (e.g. `WEB:2:orange cat`) | main site, `i` > 1 |
+| `FREE:<src or auto>:<i>:<query>` (e.g. `FREE:wikimedia:2:orange cat`) | free images |
+| `AI:<src>:<i>:<query>` (e.g. `AI:auroraimg-6m:2:frog wizard`) | AI images |
+
+An AI image served because a search found nothing is stored under the search's own key, like any other image. A search where that also fails, or a `free.` search with a `src` (which gets no AI image), stores an empty object with `err` custom metadata instead, which serves `bad.webp` for 24h. After that the query is searched again.
+
+Add an object lifecycle rule in **R2 → direct-img-store → Settings** that applies to all prefixes and deletes uploaded objects after **90 days**. It's required: nothing else expires cached images.
 
 ### KV: `DIRECT_IMG_CACHE`
 
-**Key:** normalized query (lowercase, trimmed, max 200 chars) → **Value:** `{"t":1719000000,"ct":"image/jpeg"}` — **TTL:** 90 days
-
-Other keys share the namespace. They use uppercase prefixes, which can never collide with normalized (always lowercase) queries:
+Only holds access tokens:
 
 | Key | Value | TTL |
 |---|---|---|
-| `WEB:<i>:<query>` — main site with `i` > 1 (e.g. `WEB:2:orange cat`) | Same as above | 90 days |
-| `FREE:<src or auto>:<i>:<query>` (e.g. `FREE:wikimedia:2:orange cat`) | Same as above | 90 days |
-| `AI:<src>:<i>:<query>` (e.g. `AI:auroraimg-6m:2:frog wizard`) | Same as above | 90 days |
 | `OPENVERSE_TOKEN` | Openverse access token | Token lifetime minus 10 min |
 | `SURREAL_TOKEN` | SurrealDB access token, sent instead of the password, which SurrealDB takes ~50ms to check on every request | Token lifetime minus 10 min |
-
-An AI image served because a search found nothing is stored under the search's own key, like any other image. A search where that also fails, or a `free.` search with a `src` (which gets no AI image), stores `{"t":…,"err":true}` for 24h.
 
 ### Database: `SurrealDB` (Rate Limiting, Search Locks + Result Lists)
 
 Using atomic database transactions over HTTP to track per-IP/per-day search frequencies securely and rapidly.
 
-The same transaction also claims a per-query lock (`lock:<sha256-of-KV-key>`, expires after 45s), so when several requests miss the cache for the same query at once (on any Cloudflare server), only one searches. The others wait for it to finish, then serve the image it stored in R2, and aren't counted toward the daily limit. The lock is deleted as soon as the result is stored.
+The same transaction also claims a per-query lock (`lock:<sha256-of-cache-key>`, expires after 45s), so when several requests miss the cache for the same query at once (on any Cloudflare server), only one searches. The others wait for it to finish, then serve the image it stored in R2, and aren't counted toward the daily limit. The lock is deleted as soon as the result is stored.
 
 Each search also saves its result URLs as `results:<sha256 of site, src and query>` for 1 hour, with the indexes of the images that worked so far (`pos`) and the first URL not yet tried (`next`). The transaction returns that record when it exists, and then doesn't count the request. A `?i=` already in `pos` downloads only its own image, and a new one carries on from `next`, extending the record. Expired records are deleted by the same occasional cleanup as old rate counters.
 
@@ -294,7 +298,7 @@ After deploying, visit `https://<your-domain>/_setup` once. It creates the `dire
 
 - **Cloudflare Pages** — hosting + edge functions
 - **Cloudflare R2** — image storage
-- **Cloudflare KV** — generic lookups
+- **Cloudflare KV** — API access tokens
 - **SurrealDB (v2.6.5)** — atomic rate limiting, search locks + cached result lists
 - **Cloudflare WAF** — layer 7 mitigation
 - **Brave Image Search API** — image sourcing, with Bing as the fallback
