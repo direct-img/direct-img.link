@@ -184,10 +184,10 @@ COMMIT TRANSACTION;`;
   };
 
   // Nothing found: serve an AI image of the query instead, cached like any other image. bad.webp (kept ERR_SECONDS) is
-  // only left for when that fails too, or for free.* with a ?src=, which asked for that source's images only.
+  // only left for when that fails too, or for free.*, which serves free images only.
   const fail = async (t, m, tag, p) => {
-    const fallback = (!free || src === "auto") && await aiImage(DEFAULT_AI_SOURCE, query, i, env);
-    note({ title: fallback.success ? `${t}, Served AI Image` : t, message: fallback.success ? m : `${m}\n${fallback ? `AI fallback failed: ${fallback.reason}` : `No AI fallback with src=${src}`}`, tags: tag, priority: p });
+    const fallback = !free && await aiImage(DEFAULT_AI_SOURCE, query, i, env);
+    note({ title: fallback.success ? `${t}, Served AI Image` : t, message: fallback && !fallback.success ? `${m}\nAI fallback failed: ${fallback.reason}` : m, tags: tag, priority: p });
     if (fallback.success) return await store(fallback);
     await env.R2_IMAGES.put(r2Key, "", { customMetadata: { err: "1" } });
     release();
