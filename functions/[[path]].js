@@ -1,5 +1,5 @@
 import { braveImageSearch } from "./_utils/brave.js";
-import { bingImageSearchFallback } from "./_utils/bing.js";
+import { firecrawlImageSearch, FIRECRAWL_RESULTS } from "./_utils/firecrawl.js";
 import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
 import { isFlickrPlaceholder } from "./_utils/flickr.js";
 import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
@@ -9,8 +9,9 @@ import * as LIMITS from "../assets/rate-limit.js";
 const TTL_SECONDS = 90 * 24 * 60 * 60;
 // How long a failed search keeps serving bad.webp before the query is searched again
 const ERR_SECONDS = 24 * 60 * 60;
-// Highest ?i= per site: 40 on the main site (100 Brave results), 20 on free.* (~50 Openverse + Wikimedia
-// results) and 1000 on ai.* (each is a new image, so there's no list to run out).
+// Highest ?i= per site: 40 on the main site (100 Brave results; a Firecrawl query's ?i= past FIRECRAWL_RESULTS gets
+// an AI image), 20 on free.* (~50 Openverse + Wikimedia results) and 1000 on ai.* (each is a new image, so there's no
+// list to run out).
 // Higher values serve max-i.webp, which lists these, so redraw it from design/max-i.html when they change.
 const MAX_INDEX = { "": 40, free: 20, ai: 1000 };
 // How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself
@@ -19,6 +20,10 @@ const LOCK_SECONDS = 45;
 const LIST_SECONDS = 60 * 60;
 // Image candidates downloaded at once, so one slow or dead host doesn't stall the rest for its full 5s timeout
 const PARALLEL = 4;
+// Share of main-site queries searched on Firecrawl first, the rest on Brave: Firecrawl's free plan gives 500 searches a
+// month and Brave's $5 monthly credit ~1,000, so both run out together. Picked from the query's hash, so a query always
+// gets the same provider and its ?i= keep their order.
+const FIRECRAWL_SHARE = 500 / 1500;
 
 export async function onRequest(context) {
   const { request, env, params } = context;
@@ -76,7 +81,7 @@ export async function onRequest(context) {
 
   const ip = request.headers.get("cf-connecting-ip") || "unknown";
   const today = new Date().toISOString().slice(0, 10);
-  // free.* and ai.* get their own counters (prefixed so main-site ids stay unchanged) since they never spend Brave credits
+  // free.* and ai.* get their own counters (prefixed so main-site ids stay unchanged) since they never spend search credits
   const rateId = await sha256(`${site ? `${site}:` : ""}${ip}:${today}`);
   const limit = free ? LIMITS.FREE_DAILY_LIMIT : ai ? LIMITS.AI_DAILY_LIMIT : LIMITS.DAILY_LIMIT;
   let count = 1, wait = false, locked = false, list = null;
@@ -183,10 +188,11 @@ COMMIT TRANSACTION;`;
     return new Response(buffer, { headers: imageHeaders(contentType, TTL_SECONDS * 1000) });
   };
 
-  // Nothing found: serve an AI image of the query instead, cached like any other image. bad.webp (kept ERR_SECONDS) is
-  // only left for when that fails too, or for free.*, which serves free images only.
-  const fail = async (t, m, tag, p) => {
-    const fallback = !free && await aiImage(DEFAULT_AI_SOURCE, query, i, env);
+  // Fewer than i working images: serve an AI image of the query instead, cached like any other image. bad.webp (kept
+  // ERR_SECONDS) is left for when that fails too, when the search found nothing at all, or for free.*, which serves free
+  // images only.
+  const fail = async (t, m, tag, p, aiFallback = !free) => {
+    const fallback = aiFallback && await aiImage(DEFAULT_AI_SOURCE, query, i, env);
     note({ title: fallback.success ? `${t}, Served AI Image` : t, message: fallback && !fallback.success ? `${m}\nAI fallback failed: ${fallback.reason}` : m, tags: tag, priority: p });
     if (fallback.success) return await store(fallback);
     await env.R2_IMAGES.put(r2Key, "", { customMetadata: { err: "1" } });
@@ -207,10 +213,14 @@ COMMIT TRANSACTION;`;
       return asset("bad.webp");
     }
 
+    // A Firecrawl query's search returns only FIRECRAWL_RESULTS, so a higher ?i= skips it (and its credits) for AI
+    const firecrawl = !list && !free && parseInt((await sha256(query)).slice(0, 8), 16) < FIRECRAWL_SHARE * 2 ** 32;
+    if (firecrawl && i > FIRECRAWL_RESULTS) return await fail("Past Firecrawl Results", `?i= past ${FIRECRAWL_RESULTS} on a Firecrawl query: ${cacheKey}`, "robot", 2);
+
     // The query's cached results, or a fresh search. pos holds the indexes of the working images found so far and next
     // the first URL not tried yet, so a known ?i= downloads only its own image and a new one carries on from next.
-    let { urls, pos, next } = list || { urls: await (free ? freeImageUrls(query, src, env) : webImageUrls(query, env, note)), pos: [], next: 0 };
-    // Brave and Bing both failed: ask for donations instead of an AI image, and cache nothing since it's temporary
+    let { urls, pos, next } = list || { urls: await (free ? freeImageUrls(query, src, env) : webImageUrls(query, env, note, firecrawl)), pos: [], next: 0 };
+    // Brave and Firecrawl both failed: ask for donations instead, and cache nothing since it's temporary
     if (!urls) {
       release();
       return asset("donate.webp");
@@ -218,13 +228,15 @@ COMMIT TRANSACTION;`;
     // Starting at a known image skips the ones before it, so it can't add to pos
     const known = pos.length >= i;
     let at = known ? pos[i - 1] : next, found = known ? i - 1 : pos.length, imgResult = null, timedOut = false;
+    // Too few results left to reach i (e.g. ?i=9 of 10 with 2 dead links) skips straight to the AI image
+    const reachable = known || found + urls.length - at >= i;
     const GLOBAL_DEADLINE = Date.now() + 20000;
     const failReasons = [], queue = [], abort = new AbortController();
 
     // Keeps up to PARALLEL downloads in flight, queued in result order. A known ?i= expects its image to work, so it
     // only downloads others once something fails.
     const fill = () => {
-      while (!timedOut && at < urls.length && queue.length < (known && !failReasons.length ? 1 : PARALLEL)) {
+      while (reachable && !timedOut && at < urls.length && queue.length < (known && !failReasons.length ? 1 : PARALLEL)) {
         const remaining = GLOBAL_DEADLINE - Date.now();
         if (remaining <= 500) timedOut = true;
         else queue.push({ n: at, res: fetchImage(urls[at++], Math.min(remaining, 5000), free ? FREE_UA : undefined, abort.signal) });
@@ -254,16 +266,16 @@ COMMIT TRANSACTION;`;
     abort.abort();
     if (timedOut) failReasons.push("Global timeout reached");
 
-    // Saved even if no image worked, so other ?i= of the query don't search again, but not if the search found nothing,
-    // since that can also mean Brave and Bing failed. A cached list is only updated if this got further than its saver.
+    // Saved even if no image worked, so other ?i= of the query don't search again, but not if the search found nothing.
+    // A cached list is only updated if this got further than its saver.
     if (db && urls.length && next > (list ? list.next : -1)) context.waitUntil(db(list
       ? `UPDATE results:\`${listHash}\` SET pos = ${JSON.stringify(pos)}, next = ${next} WHERE next < ${next};`
       : `UPSERT results:\`${listHash}\` SET urls = ${JSON.stringify(urls)}, pos = ${JSON.stringify(pos)}, next = ${next}, exp = time::now() + ${LIST_SECONDS}s;`
     ).catch(() => {}));
 
-    if (!urls.length) return await fail("Search Failed", `${free ? "No free results" : "Both Brave and Bing returned no results"} for: ${cacheKey}`, "question", 3);
+    if (!urls.length) return await fail("Search Failed", `${free ? "No free results" : "Brave and Firecrawl found nothing"} for: ${cacheKey}`, "question", 3, false);
     if (!imgResult) {
-      const reasonStr = failReasons.slice(0, 6).join(", ") + (failReasons.length > 6 ? ", ..." : "");
+      const reasonStr = reachable ? failReasons.slice(0, 6).join(", ") + (failReasons.length > 6 ? ", ..." : "") : `only ${urls.length} results`;
       return await fail("Fetch Error (502)", `Found ${found} of ${i} working images for: ${cacheKey}\nReasons: ${reasonStr}`, "boom,x", 4);
     }
 
@@ -279,18 +291,24 @@ function parseIndex(searchParams) {
   return /^\d+$/.test(i) && +i >= 1 ? +i : null;
 }
 
-// Brave results, or Bing's if Brave has none or refuses (e.g. once its spending limit is hit). null if Bing fails too,
-// which means we're out of searches rather than that nothing exists.
-async function webImageUrls(query, env, note) {
-  const brave = await braveImageSearch(query, env.BRAVE_API_KEY);
-  if (brave.urls?.length) return brave.urls;
-  note(brave.error
-    ? { title: "Brave Unavailable", message: `Brave failed for: ${query}. Trying Bing Fallback.\nBrave: ${brave.error}`, tags: "warning,mag", priority: 3 }
-    : { title: "Brave Search Empty", message: `No results for: ${query}. Trying Bing Fallback.`, tags: "warning,mag", priority: 3 });
-  const bing = await bingImageSearchFallback(query);
-  if (bing.urls) return bing.urls;
-  note({ title: "Bing Blocked, Served donate.webp", message: `Bing failed for: ${query}\nBing: ${bing.error}\nBrave: ${brave.error || "no results"}`, tags: "rotating_light,x", priority: 4 });
-  return null;
+// The query's provider's results (see FIRECRAWL_SHARE), or the other's if it has none or refuses (e.g. once its
+// credits run out). [] if either searched and found nothing, null if both failed, which means we're out of searches
+// rather than that nothing exists.
+async function webImageUrls(query, env, note, firecrawl) {
+  const providers = [["Brave", () => braveImageSearch(query, env.BRAVE_API_KEY)], ["Firecrawl", () => firecrawlImageSearch(query, env.FIRECRAWL_API_KEY)]];
+  if (firecrawl) providers.reverse();
+  let searched = false;
+  for (const [n, [name, search]] of providers.entries()) {
+    const res = await search();
+    if (res.urls?.length) return res.urls;
+    searched ||= !res.error;
+    const then = n ? "" : ` Trying ${providers[1][0]}.`;
+    note(res.error
+      ? { title: `${name} Unavailable`, message: `${name} failed for: ${query}.${then}\n${name}: ${res.error}`, tags: "warning,mag", priority: 3 }
+      : { title: `${name} Search Empty`, message: `No results for: ${query}.${then}`, tags: "warning,mag", priority: 3 });
+  }
+  if (!searched) note({ title: "Out of Searches, Served donate.webp", message: `Brave and Firecrawl both failed for: ${query}`, tags: "rotating_light,x", priority: 4 });
+  return searched ? [] : null;
 }
 
 async function setupSurreal(env) {

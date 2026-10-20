@@ -1,4 +1,4 @@
-// AI images for ai.direct-img.link, and the fallback when a search finds nothing
+// AI images for ai.direct-img.link, and the fallback for an ?i= past a search's working images
 const SOURCES = { "auroraimg-6m": auroraImage };
 export const DEFAULT_AI_SOURCE = "auroraimg-6m";
 

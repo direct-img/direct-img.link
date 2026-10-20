@@ -12,7 +12,7 @@ direct-img.link has no accounts and doesn't sell data. This page explains what i
 
 ## Search queries and images
 
-- When a query isn't already cached, it's sent to Brave Search, and to Bing if Brave returns nothing or is unavailable. On free.direct-img.link, it's sent to Openverse and/or Wikimedia Commons instead. Searches and image downloads are made from our servers, so your IP address isn't shared with these search providers or the sites images come from.
+- When a query isn't already cached, it's sent to Brave Search or Firecrawl (each query always goes to the same one first), and to the other if that returns nothing or is unavailable. On free.direct-img.link, it's sent to Openverse and/or Wikimedia Commons instead. Searches and image downloads are made from our servers, so your IP address isn't shared with these search providers or the sites images come from.
 - Each query (with its `i` and `src` options) and the image it returned are cached for up to 90 days. Failed searches are remembered for 24 hours.
 - Cached images are shared: anyone requesting the same query and options gets the same image.
 
