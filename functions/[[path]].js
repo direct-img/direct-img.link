@@ -177,7 +177,11 @@ COMMIT TRANSACTION;`;
     return asset("limit.webp");
   }
 
-  note({ title: `New ${label}Search`, message: `Query: ${query} (${list ? "from cached results, not counted," : `Search #${count} for`} ${ip})`, tags: list ? "mag,zap" : "mag", priority: 2 });
+  // Whether a fresh main-site search goes to Firecrawl first (see FIRECRAWL_SHARE). If it fails, the fallback's own note
+  // says the other provider was tried.
+  const firecrawl = !list && !site && parseInt((await sha256(query)).slice(0, 8), 16) < FIRECRAWL_SHARE * 2 ** 32;
+  const via = !list && !site ? `, via ${firecrawl ? "Firecrawl" : "Brave"}` : "";
+  note({ title: `New ${label}Search`, message: `Query: ${query} (${list ? "from cached results, not counted," : `Search #${count} for`} ${ip}${via})`, tags: list ? "mag,zap" : "mag", priority: 2 });
 
   // Called once the result (image or error) is stored, so waiters serve it right away instead of at lock expiry
   const release = () => locked && context.waitUntil(db(`DELETE lock:\`${keyHash}\`;`).catch(() => {}));
@@ -214,7 +218,6 @@ COMMIT TRANSACTION;`;
     }
 
     // A Firecrawl query's search returns only FIRECRAWL_RESULTS, so a higher ?i= skips it (and its credits) for AI
-    const firecrawl = !list && !free && parseInt((await sha256(query)).slice(0, 8), 16) < FIRECRAWL_SHARE * 2 ** 32;
     if (firecrawl && i > FIRECRAWL_RESULTS) return await fail("Past Firecrawl Results", `?i= past ${FIRECRAWL_RESULTS} on a Firecrawl query: ${cacheKey}`, "robot", 2);
 
     // The query's cached results, or a fresh search. pos holds the indexes of the working images found so far and next
