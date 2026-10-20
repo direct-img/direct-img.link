@@ -344,7 +344,7 @@ async function notify(env,{ title, message, tags, priority }) {
   if (!env.NTFY_URL) return;
   const endpoint = env.NTFY_URL.startsWith("http") ? env.NTFY_URL : `https://${env.NTFY_URL}`;
   try {
-    await fetch(endpoint, { method: "POST", body: message, headers: { "Title": title, "Tags": tags, "Priority": priority.toString() } });
+    await fetch(endpoint, { method: "POST", body: message, headers: { "Title": title, "Tags": tags, "Priority": priority.toString(), ...(env.NTFY_TOKEN && { "Authorization": `Bearer ${env.NTFY_TOKEN}` }) } });
   } catch {}
 }
 

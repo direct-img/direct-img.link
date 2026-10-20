@@ -242,6 +242,7 @@ Create in your Cloudflare dashboard:
 | `SURREAL_USER` | SurrealDB username | Yes |
 | `SURREAL_PASS` | SurrealDB password | Yes |
 | `NTFY_URL` | ntfy.sh topic URL for alerts | Optional |
+| `NTFY_TOKEN` | ntfy token that can write to the `NTFY_URL` topic, if the topic is protected | Optional |
 | `GOATCOUNTER_URL` | GoatCounter site URL for image hit analytics (e.g. `https://direct-img.goatcounter.com`) | Optional |
 | `GOATCOUNTER_TOKEN` | GoatCounter API token with "Record pageviews" permission | Optional |
 | `AURORA_API_KEY` | Key for the [AuroraIMG-6M API](https://github.com/direct-img/AuroraIMG-6M) (AI images, and the fallback for an `?i=` past a search's working images). Without it, `ai.` and those `?i=` serve `bad.webp` | Optional |
