@@ -251,7 +251,7 @@ Create in your Cloudflare dashboard:
 
 **Security → WAF → Rate limiting rules:**
 
-1. **Rate Limit** — 10 req/10s per IP → Block 10s
+1. **Rate Limit** — 15 req/10s per IP → Block 10s
 
 ### 8. Deploy
 
