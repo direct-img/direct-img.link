@@ -33,7 +33,12 @@ export async function onRequest(context) {
   // Every alert ends with the full request URL (site, query, ?i= and ?src=), so it's clear which request triggered it
   const note = n => context.waitUntil(notify(env, { ...n, message: `${n.message}\n${url.origin}/${path}${url.search}` }));
 
-  // _routes.json serves these statically without invoking this function; kept as a fallback
+  // free.* images are public domain or CC0 and its searches cost no credits, so search engines may crawl them (e.g. to
+  // index images embedded in articles). The main site and ai.* get robots.txt, which allows only the homepage.
+  if (path === "robots.txt" && url.hostname.startsWith("free.")) {
+    return new Response("User-agent: *\nAllow: /\n", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+  }
+  // _routes.json serves these (except robots.txt) statically without invoking this function; kept as a fallback
   if (!path || path === "index.html" || path === "robots.txt" || path.startsWith("assets/")) {
     return env.ASSETS.fetch(request);
   }
