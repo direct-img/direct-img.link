@@ -305,6 +305,7 @@ Every request runs the Worker, which counts toward the free plan's 100,000 reque
 - The top 19,900 with at least `MIN_VIEWS` (20) are promoted, up to `MAX_BYTES` (4 GB) in total. The free plan allows 20,000 static files per deploy
 - Only JPEG, PNG, GIF and WebP are promoted. Static files get their type from their extension, which these have none of, so `public/_headers` declares them all `image/jpeg`, and browsers detect these four formats from the bytes anyway
 - Images are cached between runs (Actions cache), so only newly promoted ones download from R2
+- An image is dropped once it's 90 days old, the same as the R2 lifecycle rule, so a popular query (e.g. `current us president`) is still searched again instead of staying static forever. It's promoted again the next day if it's still popular
 
 Static files ignore query strings, so the zone's rules (`scripts/rules.js`) fold the site and `?i=` into the path first. The visitor's URL doesn't change:
 

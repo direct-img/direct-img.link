@@ -4,10 +4,9 @@ import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
 import { isFlickrPlaceholder } from "./_utils/flickr.js";
 import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
 import { surreal } from "./_utils/surreal.js";
-import { MAX_INDEX, siteOf, folder, normalizeQuery, cacheKey as keyFor, r2Key as r2KeyFor, sha256 } from "./_utils/keys.js";
+import { TTL_SECONDS, MAX_INDEX, siteOf, folder, normalizeQuery, cacheKey as keyFor, r2Key as r2KeyFor, sha256 } from "./_utils/keys.js";
 import * as LIMITS from "../public/assets/rate-limit.js";
 
-const TTL_SECONDS = 90 * 24 * 60 * 60;
 // How long a failed search keeps serving bad.webp before the query is searched again
 const ERR_SECONDS = 24 * 60 * 60;
 // How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself

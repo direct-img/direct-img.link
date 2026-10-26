@@ -1,5 +1,9 @@
 // Shared by the worker and scripts/promote.js, so a promoted image's R2 key always matches the one the worker stored.
 
+// How long an image is kept: the R2 bucket's lifecycle rule deletes it then, so the query is searched again, and
+// promote.js stops serving it as a static file
+export const TTL_SECONDS = 90 * 24 * 60 * 60;
+
 // Highest ?i= per site: 40 on the main site (100 Brave results; a Firecrawl query's ?i= past FIRECRAWL_RESULTS gets
 // an AI image), 20 on free.* (~50 Openverse + Wikimedia results) and 1000 on ai.* (each is a new image, so there's no
 // list to run out).

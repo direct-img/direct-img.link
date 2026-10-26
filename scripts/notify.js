@@ -1,6 +1,6 @@
 // Sends the deploy's outcome to ntfy: what got promoted, how close the account is to the free plan's limits, and what
 // to do when something needs attention. Runs last in .github/workflows/deploy.yml, even when an earlier step failed.
-import { readFile, appendFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 
 const env = process.env;
 const r = JSON.parse(await readFile("promoted/report.json", "utf8").catch(() => "{}"));
@@ -31,21 +31,17 @@ if (r.workers) {
 }
 if (r.workersError) lines.push(`**Worker requests:** couldn't read (${esc(r.workersError)})`);
 
-// The top images, with thumbnails, go on the run's summary page, which the message links to. free/2/orange+cat →
-// https://free.direct-img.link/orange+cat?i=2 (a static file, so viewing the page doesn't cost Worker requests).
-if (r.top?.length && env.GITHUB_STEP_SUMMARY) {
-  const zone = env.ZONE || "direct-img.link";
-  const rows = r.top.map(({ id, views }) => {
-    const [f, i, name] = id.split("/"), url = `https://${f === "web" ? "" : `${f}.`}${zone}/${name}${i > 1 ? `?i=${i}` : ""}`;
-    return `| <img src="${url}" height="64"> | [${esc(name.replaceAll("+", " "))}](${url}) | ${f === "web" ? "main" : f} | ${i} | ${fmt(views)} |`;
-  });
-  await appendFile(env.GITHUB_STEP_SUMMARY, `## Top static images (views in the last ${r.days} days)\n\n| | Query | Site | i | Views |\n|---|---|---|---|---|\n${rows.join("\n")}\n`);
-}
+// web/2/orange+cat → [orange cat](https://direct-img.link/orange+cat?i=2), so each opens on its site
+const zone = env.ZONE || "direct-img.link";
+const link = id => {
+  const [f, i, name] = id.split("/");
+  return `[${esc(name.replaceAll("+", " "))}](https://${f === "web" ? "" : `${f}.`}${zone}/${name}${i > 1 ? `?i=${i}` : ""})${i > 1 ? ` i=${i}` : ""}${f === "web" ? "" : ` (${f})`}`;
+};
 
 const failed = env.STATUS !== "success";
 const body = [
   lines.join("  \n"),
-  r.top?.length && env.RUN_URL && `[See top images](${env.RUN_URL})`,
+  r.top?.length && `**Top images**\n${r.top.map((t, n) => `${n + 1}. ${link(t.id)} — ${fmt(t.views)}`).join("\n")}`,
   actions.length && `**⚠ Needs attention**\n${actions.map(a => `- ${a}`).join("\n")}`,
 ].filter(Boolean).join("\n\n") || "No report was written.";
 console.log(body);

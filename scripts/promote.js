@@ -4,7 +4,7 @@
 // promoted/report.json for scripts/notify.js. promoted/ is kept between runs (Actions cache), so only new images download.
 import { mkdir, readFile, writeFile, link, rm, readdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { MAX_INDEX, siteOf, folder, normalizeQuery, cacheKey, r2Key } from "../src/_utils/keys.js";
+import { TTL_SECONDS, MAX_INDEX, siteOf, folder, normalizeQuery, cacheKey, r2Key } from "../src/_utils/keys.js";
 import { parseFreeSource } from "../src/_utils/free.js";
 import { parseAiSource } from "../src/_utils/ai.js";
 
@@ -83,20 +83,24 @@ async function workerRequests(day) {
   return { total: Object.values(byScript).reduce((t, r) => t + r, 0), byScript };
 }
 
-// The image from the last run's cache, or from R2. Skips a failed search's empty marker and formats browsers can't detect.
+// The image from the last run's cache, or from R2. Skips a failed search's empty marker, formats browsers can't detect,
+// and images past TTL_SECONDS, so a popular query gets searched again like any other instead of staying static forever.
+const expired = uploaded => Date.now() - uploaded >= TTL_SECONDS * 1000;
 async function fetchImage(img, prev) {
-  const file = `${CACHE}/files/${img.id}`;
-  if (prev[img.id] && await readFile(file).then(() => true, () => false)) return { ...prev[img.id], cached: true };
+  const file = `${CACHE}/files/${img.id}`, p = prev[img.id];
+  if (p?.uploaded && await readFile(file).then(() => true, () => false)) return expired(p.uploaded) ? { skip: "expired" } : { ...p, cached: true };
   const res = await api(`/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${BUCKET}/objects/${img.r2}`);
   if (res.status === 404) return { skip: "missing" };
   if (!res.ok) return { skip: "failed", error: `${img.id}: HTTP ${res.status}` };
   const type = res.headers.get("content-type")?.split(";")[0].trim().toLowerCase(), buf = Buffer.from(await res.arrayBuffer());
+  const uploaded = Date.parse(res.headers.get("last-modified"));
   if (!buf.length) return { skip: "missing" };
+  if (expired(uploaded)) return { skip: "expired" };
   if (!TYPES.includes(type)) return { skip: "type" };
   if (buf.length > 25 * 2 ** 20) return { skip: "size" };
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, buf);
-  return { bytes: buf.length, type };
+  return { bytes: buf.length, type, uploaded };
 }
 
 const report = { ok: false, minViews: MIN_VIEWS, days: DAYS, maxFiles: MAX_FILES, maxBytes: MAX_BYTES, skipped: {} };
@@ -140,7 +144,7 @@ for (let k = 0; k < ranked.length; k += 4) {
     } else if (n >= MAX_FILES) report.notFitted = (report.notFitted || 0) + 1;
     else if (bytes + g.bytes > MAX_BYTES) report.skipped.budget = (report.skipped.budget || 0) + 1;
     else {
-      chosen[img.id] = { views: img.views, bytes: g.bytes, type: g.type, r2: img.r2 };
+      chosen[img.id] = { views: img.views, bytes: g.bytes, type: g.type, r2: img.r2, uploaded: g.uploaded };
       bytes += g.bytes;
       n++;
     }
@@ -167,7 +171,7 @@ Object.assign(report, {
   ok: true, promoted: ids.length, bytes,
   added: ids.filter(id => !prev[id]).length, removed: Object.keys(prev).filter(id => !chosen[id]).length,
   promotedViews: ids.reduce((a, id) => a + chosen[id].views, 0),
-  top: ids.slice(0, 50).map(id => ({ id, views: chosen[id].views })),
+  top: ids.slice(0, 10).map(id => ({ id, views: chosen[id].views })),
 });
 await writeFile(`${CACHE}/report.json`, JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
