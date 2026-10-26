@@ -10,22 +10,23 @@
 import { MAX_PLUSES } from "../src/_utils/keys.js";
 
 const env = process.env, hosts = process.argv.slice(2), ZONE = env.ZONE || "direct-img.link", TAG = "direct-img fold:";
-const PATH = "http.request.uri.path", ARG = n => `http.request.uri.args["${n}"][0]`;
+// Conditions use the raw (original) path, since the WAF rule runs after the rewrites and would see theirs
+const PATH = "http.request.uri.path", RAW = "raw.http.request.uri.path", ARG = n => `http.request.uri.args["${n}"][0]`;
 const api = (path, init) => fetch(`https://api.cloudflare.com/client/v4${path}`, { ...init, headers: { Authorization: `Bearer ${env.CLOUDFLARE_API_TOKEN}`, "Content-Type": "application/json" } }).then(r => r.json());
 // An image request: not the homepage, assets/, robots.txt, probes like /wp-admin/x.php or an already rewritten path
-const IMAGE = `http.host in {${hosts.map(h => JSON.stringify(h)).join(" ")}} and ${PATH} ne "/" and not ${PATH} contains "." and not ${PATH} wildcard "/*/*"`;
+const IMAGE = `http.host in {${hosts.map(h => JSON.stringify(h)).join(" ")}} and ${RAW} ne "/" and not ${RAW} contains "." and not ${RAW} wildcard "/*/*"`;
 // Folded only with no params but i and src (others get bad.webp from the worker), and without a literal + (%2B), since
 // a static file's %2B stands for a space
-const FOLDABLE = `${IMAGE} and (http.request.uri.query eq "" or all(http.request.uri.args.names[*] in {"i" "src"})) and not lower(${PATH}) contains "%2b"`;
+const FOLDABLE = `${IMAGE} and (http.request.uri.query eq "" or all(http.request.uri.args.names[*] in {"i" "src"})) and not lower(${RAW}) contains "%2b"`;
 const pluses = n => `"${"*+".repeat(n)}*"`;
 
 const rules = {
-  // A rule's condition sees the original path, and the free plan has no regex_replace and allows one wildcard_replace
+  // A rule can't see an earlier one's rewrite, and the free plan has no regex_replace and allows one wildcard_replace
   // per rule, so each rule handles an exact number of +s; a query with more always runs the worker. A missing param is
   // empty, so a bare query is i-.
   http_request_transform: hosts.length ? Array.from({ length: MAX_PLUSES + 1 }, (_, n) => ({
     description: `${TAG} query with ${n} +`,
-    expression: `${FOLDABLE} and ${n ? `${PATH} wildcard ${pluses(n)}` : `not ${PATH} contains "+"`} and not ${PATH} wildcard ${pluses(n + 1)}`,
+    expression: `${FOLDABLE} and ${n ? `${RAW} wildcard ${pluses(n)}` : `not ${RAW} contains "+"`} and not ${RAW} wildcard ${pluses(n + 1)}`,
     action: "rewrite",
     action_parameters: { uri: { path: { expression: `concat("/", http.host, ${n ? `wildcard_replace(lower(${PATH}), ${pluses(n)}, "${Array.from({ length: n }, (_, k) => `\${${k + 1}}%2B`).join("")}\${${n + 1}}")` : `lower(${PATH})`}, "/i", ${ARG("i")}, "-", ${ARG("src")})` } } },
   })) : [],
