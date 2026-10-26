@@ -1,10 +1,11 @@
-// Copies the most viewed images from R2 into public/, so the next deploy serves them as static files: free, unlimited
-// and without running the worker. Views come from Cloudflare's analytics, which count static files too, so a promoted
-// image that stops being viewed drops out. Run before every deploy (.github/workflows/deploy.yml); writes
-// promoted/report.json for scripts/notify.js. promoted/ is kept between runs (Actions cache), so only new images download.
+// Copies the most viewed images (any ?i= and ?src=) from R2 into public/, so the next deploy serves them as static
+// files: free, unlimited and without running the worker. Views come from Cloudflare's analytics and the WAF rule's logs,
+// which count static files too, so a promoted image that stops being viewed drops out. Run before every deploy
+// (.github/workflows/deploy.yml); writes promoted/report.json for scripts/notify.js. promoted/ is kept between runs
+// (Actions cache), so only new images download.
 import { mkdir, readFile, writeFile, link, rm, readdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { TTL_SECONDS, MAX_PLUSES, siteOf, normalizeQuery, cacheKey, r2Key } from "../src/_utils/keys.js";
+import { TTL_SECONDS, MAX_INDEX, MAX_PLUSES, parseIndex, siteOf, normalizeQuery, cacheKey, r2Key } from "../src/_utils/keys.js";
 import { parseFreeSource } from "../src/_utils/free.js";
 import { parseAiSource } from "../src/_utils/ai.js";
 
@@ -21,6 +22,8 @@ const MAX_BYTES = +(env.MAX_BYTES || 4e9);
 const TYPES = ["image/jpeg", "image/jpg", "image/pjpeg", "image/png", "image/gif", "image/webp"];
 // Queries whose file name the rules or the asset lookup would change, so a promoted file would never match
 const BAD_NAME = /[+.%\/\\?#\x00-\x1f\x7f]/;
+// Logged requests read per hour, enough to split a busy path's views across its ?i= and ?src=
+const PER_HOUR = 1000;
 const CACHE = "promoted", OUT = "public";
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -39,31 +42,48 @@ async function gql(query) {
   return r.data.viewer;
 }
 
-// The image a request for a bare query (/orange+cat) was for. Analytics has no query string, so a ?i= view counts toward
-// its query's ?i=1 too, and only ?i=1 is promoted (other ?i= always run the worker). null for anything else (the
-// homepage, assets, probes like /wp-admin/x.php).
-async function parse(host, path) {
-  const site = siteOf(host), m = path.match(/^\/([^/.]+)$/), query = m && normalizeQuery(m[1]);
-  if (!query || query.length > 200) return null;
-  const name = query.replaceAll(" ", "+");
-  if (BAD_NAME.test(query) || Buffer.byteLength(name) > 200 || name.split("+").length > MAX_PLUSES + 1) return null;
-  const src = site === "free" ? parseFreeSource(new URLSearchParams()) : site === "ai" ? parseAiSource(new URLSearchParams()) : null;
-  return { id: `${host}/1/${name}`, r2: await r2Key(site, cacheKey(site, src, 1, query)) };
+// The image a request was for, from its path (/orange+cat) and query string (?i=2&src=wikimedia), checked like the
+// worker checks them. Its id is its static file's path, which the rules build the same way
+// (free.direct-img.link/orange+cat/i2-wikimedia). null for anything else (the homepage, assets, probes like
+// /wp-admin/x.php, params the worker rejects).
+async function image(host, path, qs) {
+  const site = siteOf(host), m = path.match(/^\/([^/.]+)$/), query = m && normalizeQuery(m[1]), p = new URLSearchParams(qs);
+  if (!query || query.length > 200 || [...p.keys()].some(k => k !== "i" && !(site && k === "src"))) return null;
+  const i = parseIndex(p), src = site === "free" ? parseFreeSource(p) : site === "ai" ? parseAiSource(p) : null;
+  if (!i || i > MAX_INDEX[site] || (site && !src)) return null;
+  const name = query.replaceAll(" ", "+"), file = `i${p.get("i") ?? ""}-${p.get("src") ?? ""}`;
+  if (BAD_NAME.test(query) || /[^\w-]/.test(file) || Buffer.byteLength(name) > 200 || name.split("+").length > MAX_PLUSES + 1) return null;
+  return { id: `${host}/${name}/${file}`, r2: await r2Key(site, cacheKey(site, src, i, query)) };
 }
 
-// Views per image over the last DAYS: one query per host and day, since a query returns at most 10,000 rows. Only 200s
-// count, so redirects (e.g. /favicon.ico) aren't.
+// Views per image over the last DAYS. Analytics counts requests per path (one query per host and day, at most 10,000
+// rows each; only 200s, so redirects like /favicon.ico aren't) but has no query string, so each path's count is split
+// across its ?i= and ?src= by that day's logged requests (the WAF rule from scripts/rules.js), read an hour at a time
+// so a busy day is sampled evenly. A path with none logged that day counts as the bare query.
 async function views(zoneTag) {
-  const totals = new Map(), now = Date.now();
+  const now = Date.now(), at = h => new Date(now - h * 36e5).toISOString();
+  const logged = Array.from({ length: DAYS }, () => new Map());
+  for (let h = 0; h < DAYS * 24; h++) {
+    const { zones } = await gql(`zones(filter: {zoneTag: "${zoneTag}"}) { firewallEventsAdaptive(limit: ${PER_HOUR}, filter: {datetime_geq: "${at(h + 1)}", datetime_lt: "${at(h)}", action: "skip", source: "firewallCustom"}) { clientRequestHTTPHost clientRequestPath clientRequestQuery sampleInterval } }`);
+    for (const e of zones[0].firewallEventsAdaptive) {
+      const day = logged[Math.floor(h / 24)], key = e.clientRequestHTTPHost + e.clientRequestPath;
+      const qs = day.get(key) || day.set(key, new Map()).get(key);
+      qs.set(e.clientRequestQuery, (qs.get(e.clientRequestQuery) || 0) + e.sampleInterval);
+    }
+  }
+  const totals = new Map();
   let total = 0;
   for (const host of HOSTS) for (let d = 0; d < DAYS; d++) {
-    const range = `datetime_geq: "${new Date(now - (d + 1) * 864e5).toISOString()}", datetime_lt: "${new Date(now - d * 864e5).toISOString()}"`;
+    const range = `datetime_geq: "${at((d + 1) * 24)}", datetime_lt: "${at(d * 24)}"`;
     const { zones } = await gql(`zones(filter: {zoneTag: "${zoneTag}"}) { httpRequestsAdaptiveGroups(limit: 10000, orderBy: [count_DESC], filter: {${range}, clientRequestHTTPHost: "${host}", edgeResponseStatus: 200}) { count dimensions { clientRequestPath } } }`);
-    for (const { count, dimensions } of zones[0].httpRequestsAdaptiveGroups) {
-      const img = await parse(host, dimensions.clientRequestPath);
-      if (!img) continue;
-      total += count;
-      totals.set(img.id, { ...img, views: (totals.get(img.id)?.views || 0) + count });
+    for (const { count, dimensions: { clientRequestPath: path } } of zones[0].httpRequestsAdaptiveGroups) {
+      const qs = logged[d].get(host + path) || new Map([["", 1]]), weight = [...qs.values()].reduce((a, b) => a + b, 0);
+      for (const [q, w] of qs) {
+        const img = await image(host, path, q);
+        if (!img) continue;
+        total += (count * w) / weight;
+        totals.set(img.id, { ...img, views: (totals.get(img.id)?.views || 0) + (count * w) / weight });
+      }
     }
   }
   return { list: [...totals.values()], total };

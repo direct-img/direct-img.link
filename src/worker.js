@@ -4,7 +4,7 @@ import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
 import { isFlickrPlaceholder } from "./_utils/flickr.js";
 import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
 import { surreal } from "./_utils/surreal.js";
-import { TTL_SECONDS, MAX_INDEX, siteOf, normalizeQuery, cacheKey as keyFor, r2Key as r2KeyFor, sha256 } from "./_utils/keys.js";
+import { TTL_SECONDS, MAX_INDEX, parseIndex, siteOf, normalizeQuery, cacheKey as keyFor, r2Key as r2KeyFor, sha256 } from "./_utils/keys.js";
 import * as LIMITS from "../public/assets/rate-limit.js";
 
 // How long a failed search keeps serving bad.webp before the query is searched again
@@ -23,8 +23,7 @@ const FIRECRAWL_SHARE = 500 / 1500;
 export default { fetch: handle };
 
 async function handle(request, env, context) {
-  const site = siteOf(new URL(request.url).hostname);
-  const url = unfold(new URL(request.url), site);
+  const url = unfold(new URL(request.url)), site = siteOf(url.hostname);
   const path = url.pathname.slice(1);
   const asset = f => env.ASSETS.fetch(new Request(new URL(`/assets/${f}`, url.origin)));
   // Every alert ends with the full request URL (site, query, ?i= and ?src=), so it's clear which request triggered it
@@ -289,11 +288,6 @@ COMMIT TRANSACTION;`;
   return job;
 }
 
-// ?i=1 or higher (default 1). Returns null if invalid.
-function parseIndex(searchParams) {
-  const i = searchParams.get("i") || "1";
-  return /^\d+$/.test(i) && +i >= 1 ? +i : null;
-}
 
 // The query's provider's results (see FIRECRAWL_SHARE), or the other's if it has none or refuses (e.g. once its
 // credits run out). [] if either searched and found nothing, null if both failed, which means we're out of searches
@@ -365,17 +359,15 @@ async function countHit(env, request, query, site, params) {
   } catch {}
 }
 
-// The zone's URL Rewrite Rules (scripts/rules.js) turn a bare query into its static file's path, under its hostname
-// (free.direct-img.link/orange+cat → /free.direct-img.link/1/orange%2Bcat), so a promoted image is served without
-// running the worker. Unfolded back here, so the rest of the worker sees the original request: the rules' %2B were +s,
-// since they leave a query's own %2B alone. Links from when ?i= was folded too (/free/2/orange+cat) still work. A folded
-// path for another site is rejected like any slash.
-function unfold(url, site) {
-  const m = url.pathname.match(/^\/([^/]+)\/([^/]*)\/([^/]+)$/);
-  if (!m || ![url.hostname, site || "web"].includes(m[1])) return url;
+// The zone's URL Rewrite Rules (scripts/rules.js) give each image request a static file path under its hostname, named
+// after its ?i= and ?src= (free.direct-img.link/Orange+Cat?i=2 → /free.direct-img.link/orange%2Bcat/i2-), so a promoted
+// image is served without running the worker. Only the path is rewritten (the query string stays), so restoring it is
+// enough: the rules' %2B were +s, since they leave a query's own %2B alone.
+function unfold(url) {
+  const m = url.pathname.match(/^\/([^/]+)\/([^/]+)\/i[^/]*$/);
+  if (!m || m[1] !== url.hostname) return url;
   const u = new URL(url);
-  u.pathname = `/${m[3].replace(/%2B/gi, "+")}`;
-  if (m[2] && m[2] !== "1") u.searchParams.set("i", m[2]);
+  u.pathname = `/${m[2].replace(/%2B/gi, "+")}`;
   return u;
 }
 

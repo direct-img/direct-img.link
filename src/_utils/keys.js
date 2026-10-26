@@ -10,6 +10,12 @@ export const TTL_SECONDS = 90 * 24 * 60 * 60;
 // Higher values serve max-i.webp, which lists these, so redraw it from design/max-i.html when they change.
 export const MAX_INDEX = { "": 40, free: 20, ai: 1000 };
 
+// ?i=1 or higher (default 1). Returns null if invalid.
+export function parseIndex(searchParams) {
+  const i = searchParams.get("i") || "1";
+  return /^\d+$/.test(i) && +i >= 1 ? +i : null;
+}
+
 // "free", "ai" or "" (main site), from the hostname's first label
 export const siteOf = hostname => ["free", "ai"].find(s => hostname.startsWith(`${s}.`)) || "";
 

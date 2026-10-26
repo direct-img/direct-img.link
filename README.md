@@ -270,7 +270,7 @@ Fork this repo and add these **GitHub Actions secrets** (Settings → Secrets an
 
 Change the three `routes` in `wrangler.jsonc` to your domain, `free.<your-domain>` and `ai.<your-domain>` (each needs a proxied DNS record; with nothing behind it, use `AAAA 100::`). Any hostname starting with `free.` serves free images, and any starting with `ai.` serves AI images; everything else serves regular search.
 
-Then add the rules that let static images work (needs a token with Zone: Transform Rules Edit):
+Then add the rules that let static images work (needs a token with Zone: Transform Rules Edit and Zone WAF Edit):
 
 ```bash
 CLOUDFLARE_API_TOKEN=... node scripts/rules.js <your-domain> free.<your-domain> ai.<your-domain>
@@ -299,24 +299,25 @@ Add an object lifecycle rule in **R2 → direct-img-store → Settings** that ap
 
 ### Static Images
 
-Every request runs the Worker, which counts toward the free plan's 100,000 requests a day, except requests for files in `public/`: those are free, unlimited and keep working past the limit. So before each deploy, `scripts/promote.js` copies the most viewed images from R2 into `public/`:
+Every request runs the Worker, which counts toward the free plan's 100,000 requests a day, except requests for files in `public/`: those are free, unlimited and keep working past the limit. So before each deploy, `scripts/promote.js` copies the most viewed images (any `?i=` and `?src=`) from R2 into `public/`:
 
-- Views come from Cloudflare's zone analytics over the last 7 days, which count static files too, so a promoted image that stops being viewed drops out
+- Views come from the last 7 days of Cloudflare's zone analytics, which count static files too, so a promoted image that stops being viewed drops out. Analytics has no query string, so each query's views are split across its `?i=` and `?src=` by a WAF custom rule (`scripts/rules.js`) that logs every image request with its query string. The job reads up to 1,000 logged requests per hour, enough to estimate the split on a busy day. These show up as **Skip** events in **Security → Events**
 - The top 19,900 with at least `MIN_VIEWS` (20) are promoted, up to `MAX_BYTES` (4 GB) in total. The free plan allows 20,000 static files per deploy
 - Only JPEG, PNG, GIF and WebP are promoted, and only queries of up to 8 words (see below). Static files get their type from their extension, which these have none of, so `public/_headers` declares them all `image/jpeg`, and browsers detect these four formats from the bytes anyway
 - Images are cached between runs (Actions cache), so only newly promoted ones download from R2
 - An image is dropped once it's 90 days old, the same as the R2 lifecycle rule, so a popular query (e.g. `current us president`) is still searched again instead of staying static forever. It's promoted again the next day if it's still popular
 
-Static files ignore query strings and are shared by all three hostnames, so URL Rewrite Rules (`scripts/rules.js`) turn each bare query into its static file's path, under its hostname, first. The visitor's URL doesn't change:
+Static files ignore query strings and are shared by all three hostnames, so URL Rewrite Rules (`scripts/rules.js`) turn each image request into its static file's path first: under its hostname, named after its `?i=` and `?src=`. The visitor's URL doesn't change:
 
 | Request | Looked up as |
 |---|---|
-| `direct-img.link/orange+cat` | `/direct-img.link/1/orange%2Bcat` (lowercased, `+` encoded like the file's name) |
-| `free.direct-img.link/Orange+Cat` | `/free.direct-img.link/1/orange%2Bcat` |
+| `direct-img.link/orange+cat` | `/direct-img.link/orange%2Bcat/i-` (lowercased, `+` encoded like the file's name) |
+| `direct-img.link/Orange+Cat?i=2` | `/direct-img.link/orange%2Bcat/i2-` |
+| `free.direct-img.link/orange+cat?src=wikimedia&i=2` | `/free.direct-img.link/orange%2Bcat/i2-wikimedia` (either param order) |
 
-A promoted file there serves it; otherwise the Worker gets the request, unfolds the path and handles it as before. Requests with any params (`?i=`, `?src=`), a literal `+` (`%2B`) or a trailing slash aren't rewritten and always go to the Worker. Analytics has no query string, so `?i=` views count toward the query's `?i=1`, and only `?i=1` is promoted.
+A promoted file there serves it; otherwise the Worker gets the request, restores the path and handles it as before. Requests with other params, a literal `+` (`%2B`) or a trailing slash aren't rewritten and always go to the Worker. `?i=1` and a bare query are separate files (`i1-` and `i-`), each promoted on its own views.
 
-A rule's condition sees the original path, and the free plan has no `regex_replace` and allows one `wildcard_replace` per rule, so there's one rule per number of `+`s (0–7, 8 of the plan's 10). Queries of 9+ words are never promoted.
+The static file server redirects a name with `+`, `=` or `&` to its encoded form, which would change the visitor's URL, so the rules encode `+` as `%2B` and build the name from the param values. A rule's condition sees the original path, and the free plan has no `regex_replace` and allows one `wildcard_replace` per rule, so there's one rule per number of `+`s (0–7, 8 of the plan's 10). Queries of 9+ words are never promoted.
 
 ### KV: `DIRECT_IMG_CACHE`
 

@@ -31,10 +31,12 @@ if (r.workers) {
 }
 if (r.workersError) lines.push(`**Worker requests:** couldn't read (${esc(r.workersError)})`);
 
-// free.direct-img.link/1/orange+cat → [orange cat](https://free.direct-img.link/orange+cat) (free), so each opens on its site
+// free.direct-img.link/orange+cat/i2-wikimedia → [orange cat](https://free.direct-img.link/orange+cat?i=2&src=wikimedia)
+// i=2 src=wikimedia (free), so each opens on its site
 const link = id => {
-  const [host, , name] = id.split("/"), site = host.split(".").length > 2 && host.split(".")[0];
-  return `[${esc(name.replaceAll("+", " "))}](https://${host}/${name})${site ? ` (${site})` : ""}`;
+  const [host, name, file] = id.split("/"), [, i, src] = file.match(/^i([^-]*)-(.*)$/), site = host.split(".").length > 2 && host.split(".")[0];
+  const qs = new URLSearchParams(Object.entries({ i, src }).filter(([, v]) => v)).toString();
+  return `[${esc(name.replaceAll("+", " "))}](https://${host}/${name}${qs && `?${qs}`})${qs && ` ${esc(qs.replace("&", " "))}`}${site ? ` (${site})` : ""}`;
 };
 
 const failed = env.STATUS !== "success";
