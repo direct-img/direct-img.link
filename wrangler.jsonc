@@ -1,0 +1,20 @@
+{
+  "name": "direct-img",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-02-13",
+  // Files in public/ are served without running the worker (free, unlimited and not counted toward the 100,000 requests
+  // a day), including the images scripts/promote.js adds before each deploy. robots.txt differs on free.*, so the
+  // worker answers it.
+  "assets": { "directory": "public", "binding": "ASSETS", "run_worker_first": ["/robots.txt"] },
+  "r2_buckets": [{ "binding": "R2_IMAGES", "bucket_name": "direct-img-store" }],
+  "kv_namespaces": [{ "binding": "DIRECT_IMG_CACHE", "id": "3d7301ab34db464cb568f31cbea7ce8c" }],
+  "vars": { "GOATCOUNTER_URL": "https://direct-img.goatcounter.com" },
+  // Routes rather than custom domains, so the old Pages project stays behind them as the origin to roll back to
+  "routes": [
+    { "pattern": "direct-img.link/*", "zone_name": "direct-img.link" },
+    { "pattern": "free.direct-img.link/*", "zone_name": "direct-img.link" },
+    { "pattern": "ai.direct-img.link/*", "zone_name": "direct-img.link" }
+  ],
+  "workers_dev": false,
+  "preview_urls": false
+}

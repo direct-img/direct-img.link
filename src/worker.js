@@ -4,16 +4,12 @@ import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
 import { isFlickrPlaceholder } from "./_utils/flickr.js";
 import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
 import { surreal } from "./_utils/surreal.js";
-import * as LIMITS from "../assets/rate-limit.js";
+import { MAX_INDEX, siteOf, folder, normalizeQuery, cacheKey as keyFor, r2Key as r2KeyFor, sha256 } from "./_utils/keys.js";
+import * as LIMITS from "../public/assets/rate-limit.js";
 
 const TTL_SECONDS = 90 * 24 * 60 * 60;
 // How long a failed search keeps serving bad.webp before the query is searched again
 const ERR_SECONDS = 24 * 60 * 60;
-// Highest ?i= per site: 40 on the main site (100 Brave results; a Firecrawl query's ?i= past FIRECRAWL_RESULTS gets
-// an AI image), 20 on free.* (~50 Openverse + Wikimedia results) and 1000 on ai.* (each is a new image, so there's no
-// list to run out).
-// Higher values serve max-i.webp, which lists these, so redraw it from design/max-i.html when they change.
-const MAX_INDEX = { "": 40, free: 20, ai: 1000 };
 // How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself
 const LOCK_SECONDS = 45;
 // How long a search's results are kept for the query's other ?i=, which then don't search again or count toward limits
@@ -25,20 +21,22 @@ const PARALLEL = 4;
 // gets the same provider and its ?i= keep their order.
 const FIRECRAWL_SHARE = 500 / 1500;
 
-export async function onRequest(context) {
-  const { request, env, params } = context;
-  const url = new URL(request.url);
-  const path = params.path?.join("/") || "";
+export default { fetch: handle };
+
+async function handle(request, env, context) {
+  const site = siteOf(new URL(request.url).hostname);
+  const url = unfold(new URL(request.url), site);
+  const path = url.pathname.slice(1);
   const asset = f => env.ASSETS.fetch(new Request(new URL(`/assets/${f}`, url.origin)));
   // Every alert ends with the full request URL (site, query, ?i= and ?src=), so it's clear which request triggered it
   const note = n => context.waitUntil(notify(env, { ...n, message: `${n.message}\n${url.origin}/${path}${url.search}` }));
 
   // free.* images are public domain or CC0 and its searches cost no credits, so search engines may crawl them (e.g. to
   // index images embedded in articles). The main site and ai.* get robots.txt, which allows only the homepage.
-  if (path === "robots.txt" && url.hostname.startsWith("free.")) {
+  if (path === "robots.txt" && site === "free") {
     return new Response("User-agent: *\nAllow: /\n", { headers: { "Content-Type": "text/plain; charset=utf-8" } });
   }
-  // _routes.json serves these (except robots.txt) statically without invoking this function; kept as a fallback
+  // Static assets are served without invoking this worker (except robots.txt, see run_worker_first); kept as a fallback
   if (!path || path === "index.html" || path === "robots.txt" || path.startsWith("assets/")) {
     return env.ASSETS.fetch(request);
   }
@@ -56,7 +54,6 @@ export async function onRequest(context) {
   // ?i= picks which result to serve. free.direct-img.link serves only unrestricted images and ai.direct-img.link only
   // AI-generated ones; both also take ?src=. Any other param (e.g. scanner probes like ?path=../../.env) is rejected
   // before it can cost a search.
-  const site = ["free", "ai"].find(s => url.hostname.startsWith(`${s}.`)) || "";
   const free = site === "free", ai = site === "ai";
   const label = { free: "Free ", ai: "AI " }[site] || "";
   const i = parseIndex(url.searchParams);
@@ -69,11 +66,9 @@ export async function onRequest(context) {
   const counted = new URLSearchParams(Object.entries({ i, src }).filter(([k]) => url.searchParams.has(k))).toString();
   context.waitUntil(countHit(env, request, query, site, counted));
 
-  // Main-site i=1 keeps the bare query so existing cache entries stay valid.
-  // Other keys use uppercase prefixes, which can't collide with (always lowercased) queries.
-  const cacheKey = site ? `${site.toUpperCase()}:${src}:${i}:${query}` : i === 1 ? query : `WEB:${i}:${query}`;
+  const cacheKey = keyFor(site, src, i, query);
   const keyHash = await sha256(cacheKey);
-  const r2Key = `${site ? `${site}/` : ""}${keyHash}`;
+  const r2Key = await r2KeyFor(site, cacheKey);
   // A search's results are kept for LIST_SECONDS, so other ?i= of the same query skip the search. ai.* has no list.
   const listHash = !ai && await sha256(["LIST", site, src, query].join(":"));
 
@@ -371,17 +366,16 @@ async function countHit(env, request, query, site, params) {
   } catch {}
 }
 
-function normalizeQuery(path) {
-  try {
-    return decodeURIComponent(path.replace(/\+/g, " ")).toLowerCase().trim().replace(/[\x00-\x1f]/g, "").replace(/\/+$/, "").replace(/\s+/g, " ");
-  } catch {
-    return path.toLowerCase().trim().replace(/[\x00-\x1f]/g, "").replace(/\/+$/, "").replace(/\s+/g, " ");
-  }
-}
-
-async function sha256(str) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, "0")).join("");
+// The zone's rules fold the site and ?i= into the path (/orange+cat?i=2 → /web/2/orange+cat, and a bare query gets i 1)
+// so promoted images can be served as static files, which ignore query strings. Unfolded back here, so the rest of the
+// worker sees the original request. A folded path for another site is left as is, so it's rejected like any slash.
+function unfold(url, site) {
+  const m = url.pathname.match(/^\/(web|free|ai)\/([^/]*)\/([^/]+)$/);
+  if (!m || m[1] !== folder(site)) return url;
+  const u = new URL(url);
+  u.pathname = `/${m[3]}`;
+  if (m[2] && m[2] !== "1") u.searchParams.set("i", m[2]);
+  return u;
 }
 
 // abort cancels a download that's no longer needed (another candidate already won)

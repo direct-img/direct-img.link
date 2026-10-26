@@ -209,7 +209,7 @@ curl -X POST -H "Content-Type: application/json" -d '{"name":"<unique app name>"
 2. Click the verification link Openverse emails you (until then, anonymous limits apply)
 3. Add them as the `OPENVERSE_CLIENT_ID` and `OPENVERSE_CLIENT_SECRET` secrets below
 
-The function exchanges them for an access token (valid ~12h) and caches it in KV, fetching a new one automatically when it expires.
+The worker exchanges them for an access token (valid ~12h) and caches it in KV, fetching a new one automatically when it expires.
 
 ### 4. Cloudflare Resources
 
@@ -220,9 +220,9 @@ Create in your Cloudflare dashboard:
 | R2 Bucket | `direct-img-store` | Stores cached images |
 | KV Namespace | `DIRECT_IMG_CACHE` | Openverse and SurrealDB access tokens |
 
-### 5. Pages Bindings
+### 5. Worker Bindings
 
-**Settings → Functions → Bindings:**
+Set in `wrangler.jsonc` (put your KV namespace's ID there):
 
 | Type | Variable | Resource |
 |---|---|---|
@@ -231,7 +231,7 @@ Create in your Cloudflare dashboard:
 
 ### 6. Secrets
 
-**Settings → Environment variables:**
+**Worker secrets** (`npx wrangler secret put <NAME>`; `GOATCOUNTER_URL` is a plain var in `wrangler.jsonc`):
 
 | Variable | Description | Required |
 |---|---|---|
@@ -256,11 +256,25 @@ Create in your Cloudflare dashboard:
 
 ### 8. Deploy
 
-Fork this repo, connect to Cloudflare Pages, deploy.
+Fork this repo and add these **GitHub Actions secrets** (Settings → Secrets and variables → Actions):
 
-### 9. Free and AI Images Domains
+| Secret | Description |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | API token with Account: Workers Scripts Edit, Workers R2 Storage Read, Account Analytics Read, and Zone (your domain): Workers Routes Edit, Analytics Read, Zone Read |
+| `CLOUDFLARE_ACCOUNT_ID` | Your Cloudflare account ID |
+| `NTFY_URL`, `NTFY_TOKEN` | Where each deploy's report goes (optional) |
 
-**Pages project → Custom domains → Set up a domain:** add `free.<your-domain>` and `ai.<your-domain>`. Any hostname starting with `free.` serves free images, and any starting with `ai.` serves AI images; everything else serves regular search.
+`.github/workflows/deploy.yml` deploys on every push to `main` and daily just after 00:00 UTC (also runnable by hand from the Actions tab). Each run promotes popular images first (see [Static Images](#static-images)) and ends with an ntfy message: how many images are static, how many Worker requests the account used yesterday out of the free 100,000, and what to do when something needs attention (failed deploy, requests near the limit, static slots or size budget full, analytics unreadable).
+
+### 9. Domains and Rules
+
+Change the three `routes` in `wrangler.jsonc` to your domain, `free.<your-domain>` and `ai.<your-domain>` (each needs a proxied DNS record). Any hostname starting with `free.` serves free images, and any starting with `ai.` serves AI images; everything else serves regular search.
+
+Then add the rules that let static images work (needs a token with Zone: Transform Rules Edit and Single Redirect Edit):
+
+```bash
+CLOUDFLARE_API_TOKEN=... node scripts/rules.js <your-domain> free.<your-domain> ai.<your-domain>
+```
 
 ---
 
@@ -282,6 +296,25 @@ Every request looks up its key here first, and a cached image is served from tha
 An AI image served for an `?i=` past a search's working images is stored under the search's own key, like any other image. A search that finds nothing, one whose AI image fails too, or a `free.` search with too few images (which gets no AI image) stores an empty object with `err` custom metadata instead, which serves `bad.webp` for 24h. After that the query is searched again.
 
 Add an object lifecycle rule in **R2 → direct-img-store → Settings** that applies to all prefixes and deletes uploaded objects after **90 days**. It's required: nothing else expires cached images.
+
+### Static Images
+
+Every request runs the Worker, which counts toward the free plan's 100,000 requests a day, except requests for files in `public/`: those are free, unlimited and keep working past the limit. So before each deploy, `scripts/promote.js` copies the most viewed images from R2 into `public/`:
+
+- Views come from Cloudflare's zone analytics over the last 7 days, which count static files too, so a promoted image that stops being viewed drops out
+- The top 19,900 with at least `MIN_VIEWS` (20) are promoted, up to `MAX_BYTES` (4 GB) in total. The free plan allows 20,000 static files per deploy
+- Only JPEG, PNG, GIF and WebP are promoted. Static files get their type from their extension, which these have none of, so `public/_headers` declares them all `image/jpeg`, and browsers detect these four formats from the bytes anyway
+- Images are cached between runs (Actions cache), so only newly promoted ones download from R2
+
+Static files ignore query strings, so the zone's rules (`scripts/rules.js`) fold the site and `?i=` into the path first. The visitor's URL doesn't change:
+
+| Request | Looked up as |
+|---|---|
+| `direct-img.link/orange+cat` | `/web/1/orange+cat` (URL Rewrite, lowercased) |
+| `direct-img.link/orange+cat?i=2` | 302 to `/web/2/orange+cat` (Redirect, so `?i=` shows up in analytics) |
+| `free.direct-img.link/orange+cat` | `/free/1/orange+cat` |
+
+A promoted file named `/web/2/orange+cat` serves those; anything else falls through to the Worker, which unfolds the path and handles it as before. Requests with other params (`?src=`), a literal `+` (`%2B`) or a trailing slash aren't folded and always go to the Worker. Static files with a `+` in the name answer with one extra redirect (to `%2B`), which is still free.
 
 ### KV: `DIRECT_IMG_CACHE`
 
@@ -308,7 +341,7 @@ After deploying, visit `https://<your-domain>/_setup` once. It creates the `dire
 
 ## Stack
 
-- **Cloudflare Pages** — hosting + edge functions
+- **Cloudflare Workers** — hosting, with popular images as static assets
 - **Cloudflare R2** — image storage
 - **Cloudflare KV** — API access tokens
 - **SurrealDB (v2.6.5)** — atomic rate limiting, search locks + cached result lists

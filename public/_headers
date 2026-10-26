@@ -1,0 +1,14 @@
+# Promoted images (scripts/promote.js) have no file extension, so they'd go out without a Content-Type. Browsers detect
+# JPEG, PNG, GIF and WebP from the bytes whatever type is declared, so promote.js promotes only those.
+/web/*
+  Content-Type: image/jpeg
+  Cache-Control: public, max-age=604800
+  Access-Control-Allow-Origin: *
+/free/*
+  Content-Type: image/jpeg
+  Cache-Control: public, max-age=604800
+  Access-Control-Allow-Origin: *
+/ai/*
+  Content-Type: image/jpeg
+  Cache-Control: public, max-age=604800
+  Access-Control-Allow-Origin: *

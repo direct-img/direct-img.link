@@ -1,0 +1,72 @@
+# Deploys the worker on every push to main and once a day. Each run first promotes the most viewed images to static
+# files (scripts/promote.js) and ends with an ntfy message on what changed and anything that needs attention.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Just after 00:00 UTC, when the free plan's daily request count resets, so the report covers a full day
+    - cron: "23 0 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+
+permissions:
+  contents: read
+  actions: write # deletes the previous run's image cache
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # Promotion limits (see scripts/promote.js)
+      MIN_VIEWS: 20
+      MAX_BYTES: 4000000000
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Last run's promoted images, so only newly promoted ones download from R2
+      - uses: actions/cache/restore@v4
+        with:
+          path: promoted
+          key: promoted-${{ github.run_id }}
+          restore-keys: promoted-
+
+      - id: promote
+        run: node scripts/promote.js
+
+      - id: deploy
+        run: npx -y wrangler@4 deploy
+
+      - if: steps.promote.outcome == 'success'
+        uses: actions/cache/save@v4
+        with:
+          path: promoted
+          key: promoted-${{ github.run_id }}
+
+      # Each run saves a new cache, so older ones go to stay under the repo's 10 GB
+      - if: steps.promote.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh cache list --key promoted- --json id,key --jq '.[] | select(.key != "promoted-${{ github.run_id }}") | .id' | xargs -r -n1 gh cache delete
+
+      - if: always()
+        env:
+          NTFY_URL: ${{ secrets.NTFY_URL }}
+          NTFY_TOKEN: ${{ secrets.NTFY_TOKEN }}
+          STATUS: ${{ job.status }}
+          FAILED_STEP: ${{ steps.promote.outcome == 'failure' && 'Promoting images' || steps.deploy.outcome == 'failure' && 'wrangler deploy' || '' }}
+          TRIGGER: ${{ github.event_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/notify.js
