@@ -25,7 +25,7 @@ Queries and IP addresses may be included in alerts sent to the maintainer throug
 We use [GoatCounter](https://www.goatcounter.com), a privacy-focused analytics service that doesn't use cookies.
 
 - The homepage loads GoatCounter's script, which records the visit, the referring page, and your screen width.
-- Each image request is reported to GoatCounter from our servers, including the query, the referring page (for example, the site embedding the image), your user agent, and your IP address.
+- Each image request is reported to GoatCounter from our servers, including the query and any `?i=` or `?src=`, the referring page (for example, the site embedding the image), your user agent, and your IP address.
 - GoatCounter uses your IP address and user agent to work out your country, browser, and operating system, and to count unique visitors. It [doesn't store the IP address or user agent itself](https://www.goatcounter.com/help/sessions).
 
 ## Newsletter

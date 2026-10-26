@@ -65,7 +65,9 @@ export async function onRequest(context) {
   if (!i || (site && !src) || extra) return asset("bad.webp");
   if (i > MAX_INDEX[site]) return asset("max-i.webp");
 
-  context.waitUntil(countHit(env, request, query, site));
+  // Only the ?i= and ?src= actually given are counted (normalized, e.g. ?i=02 → ?i=2), so bare queries stay one path
+  const counted = new URLSearchParams(Object.entries({ i, src }).filter(([k]) => url.searchParams.has(k))).toString();
+  context.waitUntil(countHit(env, request, query, site, counted));
 
   // Main-site i=1 keeps the bare query so existing cache entries stay valid.
   // Other keys use uppercase prefixes, which can't collide with (always lowercased) queries.
@@ -353,15 +355,17 @@ async function notify(env,{ title, message, tags, priority }) {
   } catch {}
 }
 
-// site is "free", "ai" or "" (main site); each is counted under its own path prefix
-async function countHit(env, request, query, site) {
+// site is "free", "ai" or "" (main site); each is counted under its own path prefix, with params (e.g. "i=2&src=flux")
+// after the query. ? and # in the query are escaped so GoatCounter doesn't split the path there.
+async function countHit(env, request, query, site, params) {
   if (!env.GOATCOUNTER_URL || !env.GOATCOUNTER_TOKEN) return;
   const h = k => request.headers.get(k) || "";
+  const path = `${site ? `/${site}` : ""}/${query.replace(/ /g, "+").replace(/[?#]/g, encodeURIComponent)}${params && `?${params}`}`;
   try {
     await fetch(`${env.GOATCOUNTER_URL}/api/v0/count`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${env.GOATCOUNTER_TOKEN}` },
-      body: JSON.stringify({ no_sessions: true, hits: [{ path: `${site ? `/${site}` : ""}/${query.replace(/ /g, "+")}`, title: query, ref: h("referer"), user_agent: h("user-agent"), ip: h("cf-connecting-ip") }] }),
+      body: JSON.stringify({ no_sessions: true, hits: [{ path, title: query, ref: h("referer"), user_agent: h("user-agent"), ip: h("cf-connecting-ip") }] }),
       signal: AbortSignal.timeout(5000)
     });
   } catch {}
