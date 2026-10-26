@@ -28,14 +28,14 @@ jobs:
       MIN_VIEWS: 20
       MAX_BYTES: 4000000000
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
 
       # Last run's promoted images, so only newly promoted ones download from R2
-      - uses: actions/cache/restore@v4
+      - uses: actions/cache/restore@v6
         with:
           path: promoted
           key: promoted-${{ github.run_id }}
@@ -48,7 +48,7 @@ jobs:
         run: npx -y wrangler@4 deploy
 
       - if: steps.promote.outcome == 'success'
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: promoted
           key: promoted-${{ github.run_id }}
