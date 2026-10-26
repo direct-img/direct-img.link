@@ -365,14 +365,15 @@ async function countHit(env, request, query, site, params) {
   } catch {}
 }
 
-// The zone's rules fold the site and ?i= into the path (/orange+cat?i=2 → /web/2/orange+cat, and a bare query gets i 1)
-// so promoted images can be served as static files, which ignore query strings. Unfolded back here, so the rest of the
-// worker sees the original request. A folded path for another site is left as is, so it's rejected like any slash.
+// The zone's URL Rewrite (scripts/rules.js) turns a bare query into its site's static file path (/orange+cat →
+// /web/1/orange%2Bcat) so a promoted image is served without running the worker. Unfolded back here, so the rest of the
+// worker sees the original request: the rule's %2B were +s, since it leaves a query's own %2B unfolded. Other ?i= in the
+// path are still accepted (links from when ?i= was folded too). A folded path for another site is rejected like any slash.
 function unfold(url, site) {
   const m = url.pathname.match(/^\/(web|free|ai)\/([^/]*)\/([^/]+)$/);
   if (!m || m[1] !== folder(site)) return url;
   const u = new URL(url);
-  u.pathname = `/${m[3]}`;
+  u.pathname = `/${m[3].replace(/%2B/gi, "+")}`;
   if (m[2] && m[2] !== "1") u.searchParams.set("i", m[2]);
   return u;
 }

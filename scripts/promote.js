@@ -4,7 +4,7 @@
 // promoted/report.json for scripts/notify.js. promoted/ is kept between runs (Actions cache), so only new images download.
 import { mkdir, readFile, writeFile, link, rm, readdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { TTL_SECONDS, MAX_INDEX, siteOf, folder, normalizeQuery, cacheKey, r2Key } from "../src/_utils/keys.js";
+import { TTL_SECONDS, siteOf, folder, normalizeQuery, cacheKey, r2Key } from "../src/_utils/keys.js";
 import { parseFreeSource } from "../src/_utils/free.js";
 import { parseAiSource } from "../src/_utils/ai.js";
 
@@ -39,22 +39,20 @@ async function gql(query) {
   return r.data.viewer;
 }
 
-// The image a request was for: a folded path (/web/2/orange+cat) or a bare query (/orange+cat), which is ?i=1 since
-// the rules redirect every ?i= to its folded path. null for anything else (the homepage, assets, another site's folder).
+// The image a request for a bare query (/orange+cat) was for. Analytics has no query string, so a ?i= view counts toward
+// its query's ?i=1 too, and only ?i=1 is promoted (other ?i= always run the worker). null for anything else (the
+// homepage, assets, probes like /wp-admin/x.php).
 async function parse(host, path) {
-  const site = siteOf(host), m = path.match(/^\/(?:(web|free|ai)\/(\d+)\/)?([^/.]+)$/);
-  if (!m || (m[1] && m[1] !== folder(site))) return null;
-  // A promoted image's +s come back as %2B from the asset redirect, while the rules lowercase a query's own %2b
-  const i = +(m[2] || 1), query = normalizeQuery(m[1] ? m[3].replaceAll("%2B", "+") : m[3]);
-  if (!query || query.length > 200 || i < 1 || i > MAX_INDEX[site]) return null;
+  const site = siteOf(host), m = path.match(/^\/([^/.]+)$/), query = m && normalizeQuery(m[1]);
+  if (!query || query.length > 200) return null;
   const name = query.replaceAll(" ", "+");
   if (BAD_NAME.test(query) || Buffer.byteLength(name) > 200) return null;
   const src = site === "free" ? parseFreeSource(new URLSearchParams()) : site === "ai" ? parseAiSource(new URLSearchParams()) : null;
-  return { id: `${folder(site)}/${i}/${name}`, r2: await r2Key(site, cacheKey(site, src, i, query)) };
+  return { id: `${folder(site)}/1/${name}`, r2: await r2Key(site, cacheKey(site, src, 1, query)) };
 }
 
 // Views per image over the last DAYS: one query per host and day, since a query returns at most 10,000 rows. Only 200s
-// count, so a promoted image isn't counted again for the redirect that encodes its + as %2B.
+// count, so redirects (e.g. /favicon.ico) aren't.
 async function views(zoneTag) {
   const totals = new Map(), now = Date.now();
   let total = 0;

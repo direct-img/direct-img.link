@@ -270,7 +270,7 @@ Fork this repo and add these **GitHub Actions secrets** (Settings → Secrets an
 
 Change the three `routes` in `wrangler.jsonc` to your domain, `free.<your-domain>` and `ai.<your-domain>` (each needs a proxied DNS record; with nothing behind it, use `AAAA 100::`). Any hostname starting with `free.` serves free images, and any starting with `ai.` serves AI images; everything else serves regular search.
 
-Then add the rules that let static images work (needs a token with Zone: Transform Rules Edit and Single Redirect Edit):
+Then add the rules that let static images work (needs a token with Zone: Transform Rules Edit):
 
 ```bash
 CLOUDFLARE_API_TOKEN=... node scripts/rules.js <your-domain> free.<your-domain> ai.<your-domain>
@@ -307,15 +307,14 @@ Every request runs the Worker, which counts toward the free plan's 100,000 reque
 - Images are cached between runs (Actions cache), so only newly promoted ones download from R2
 - An image is dropped once it's 90 days old, the same as the R2 lifecycle rule, so a popular query (e.g. `current us president`) is still searched again instead of staying static forever. It's promoted again the next day if it's still popular
 
-Static files ignore query strings, so the zone's rules (`scripts/rules.js`) fold the site and `?i=` into the path first. The visitor's URL doesn't change:
+Static files ignore query strings, so a URL Rewrite Rule (`scripts/rules.js`) turns each site's bare queries into their static file's path first. The visitor's URL doesn't change:
 
 | Request | Looked up as |
 |---|---|
-| `direct-img.link/orange+cat` | `/web/1/orange+cat` (URL Rewrite, lowercased) |
-| `direct-img.link/orange+cat?i=2` | 302 to `/web/2/orange+cat` (Redirect, so `?i=` shows up in analytics) |
-| `free.direct-img.link/orange+cat` | `/free/1/orange+cat` |
+| `direct-img.link/orange+cat` | `/web/1/orange%2Bcat` (lowercased, `+` encoded like the file's name) |
+| `free.direct-img.link/Orange+Cat` | `/free/1/orange%2Bcat` |
 
-A promoted file named `/web/2/orange+cat` serves those; anything else falls through to the Worker, which unfolds the path and handles it as before. Requests with other params (`?src=`), a literal `+` (`%2B`) or a trailing slash aren't folded and always go to the Worker. Static files with a `+` in the name answer with one extra redirect (to `%2B`), which is still free.
+A promoted file there serves it; otherwise the Worker gets the request, unfolds the path and handles it as before. Requests with any params (`?i=`, `?src=`), a literal `+` (`%2B`) or a trailing slash aren't rewritten and always go to the Worker. Analytics has no query string, so `?i=` views count toward the query's `?i=1`, and only `?i=1` is promoted. The free plan has no `regex_replace`, so the rule encodes up to 10 `+`s; a longer query's static file answers with one extra (free) redirect.
 
 ### KV: `DIRECT_IMG_CACHE`
 
