@@ -2,6 +2,4 @@ node_modules/
 .wrangler/
 # Filled by scripts/promote.js before each deploy
 promoted/
-public/web/
-public/free/
-public/ai/
+public/*direct-img.link/

@@ -31,11 +31,10 @@ if (r.workers) {
 }
 if (r.workersError) lines.push(`**Worker requests:** couldn't read (${esc(r.workersError)})`);
 
-// web/2/orange+cat → [orange cat](https://direct-img.link/orange+cat?i=2), so each opens on its site
-const zone = env.ZONE || "direct-img.link";
+// free.direct-img.link/1/orange+cat → [orange cat](https://free.direct-img.link/orange+cat) (free), so each opens on its site
 const link = id => {
-  const [f, i, name] = id.split("/");
-  return `[${esc(name.replaceAll("+", " "))}](https://${f === "web" ? "" : `${f}.`}${zone}/${name}${i > 1 ? `?i=${i}` : ""})${i > 1 ? ` i=${i}` : ""}${f === "web" ? "" : ` (${f})`}`;
+  const [host, , name] = id.split("/"), site = host.split(".").length > 2 && host.split(".")[0];
+  return `[${esc(name.replaceAll("+", " "))}](https://${host}/${name})${site ? ` (${site})` : ""}`;
 };
 
 const failed = env.STATUS !== "success";

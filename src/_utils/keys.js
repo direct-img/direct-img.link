@@ -13,9 +13,8 @@ export const MAX_INDEX = { "": 40, free: 20, ai: 1000 };
 // "free", "ai" or "" (main site), from the hostname's first label
 export const siteOf = hostname => ["free", "ai"].find(s => hostname.startsWith(`${s}.`)) || "";
 
-// Path prefix each site's ?i= is folded into by the zone's URL Rewrite and Redirect Rules (scripts/rules.js), e.g.
-// /orange+cat?i=2 → /web/2/orange+cat, so promoted images can be static files, which ignore query strings
-export const folder = site => site || "web";
+// Most +s in a query the zone's URL Rewrite Rules (scripts/rules.js) can turn into a static file's path, one rule each
+export const MAX_PLUSES = 7;
 
 export function normalizeQuery(path) {
   const clean = s => s.toLowerCase().trim().replace(/[\x00-\x1f]/g, "").replace(/\/+$/, "").replace(/\s+/g, " ");

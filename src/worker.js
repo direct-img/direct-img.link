@@ -4,7 +4,7 @@ import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
 import { isFlickrPlaceholder } from "./_utils/flickr.js";
 import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
 import { surreal } from "./_utils/surreal.js";
-import { TTL_SECONDS, MAX_INDEX, siteOf, folder, normalizeQuery, cacheKey as keyFor, r2Key as r2KeyFor, sha256 } from "./_utils/keys.js";
+import { TTL_SECONDS, MAX_INDEX, siteOf, normalizeQuery, cacheKey as keyFor, r2Key as r2KeyFor, sha256 } from "./_utils/keys.js";
 import * as LIMITS from "../public/assets/rate-limit.js";
 
 // How long a failed search keeps serving bad.webp before the query is searched again
@@ -365,13 +365,14 @@ async function countHit(env, request, query, site, params) {
   } catch {}
 }
 
-// The zone's URL Rewrite (scripts/rules.js) turns a bare query into its site's static file path (/orange+cat →
-// /web/1/orange%2Bcat) so a promoted image is served without running the worker. Unfolded back here, so the rest of the
-// worker sees the original request: the rule's %2B were +s, since it leaves a query's own %2B unfolded. Other ?i= in the
-// path are still accepted (links from when ?i= was folded too). A folded path for another site is rejected like any slash.
+// The zone's URL Rewrite Rules (scripts/rules.js) turn a bare query into its static file's path, under its hostname
+// (free.direct-img.link/orange+cat → /free.direct-img.link/1/orange%2Bcat), so a promoted image is served without
+// running the worker. Unfolded back here, so the rest of the worker sees the original request: the rules' %2B were +s,
+// since they leave a query's own %2B alone. Links from when ?i= was folded too (/free/2/orange+cat) still work. A folded
+// path for another site is rejected like any slash.
 function unfold(url, site) {
-  const m = url.pathname.match(/^\/(web|free|ai)\/([^/]*)\/([^/]+)$/);
-  if (!m || m[1] !== folder(site)) return url;
+  const m = url.pathname.match(/^\/([^/]+)\/([^/]*)\/([^/]+)$/);
+  if (!m || ![url.hostname, site || "web"].includes(m[1])) return url;
   const u = new URL(url);
   u.pathname = `/${m[3].replace(/%2B/gi, "+")}`;
   if (m[2] && m[2] !== "1") u.searchParams.set("i", m[2]);

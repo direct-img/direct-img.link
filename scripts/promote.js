@@ -4,7 +4,7 @@
 // promoted/report.json for scripts/notify.js. promoted/ is kept between runs (Actions cache), so only new images download.
 import { mkdir, readFile, writeFile, link, rm, readdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { TTL_SECONDS, siteOf, folder, normalizeQuery, cacheKey, r2Key } from "../src/_utils/keys.js";
+import { TTL_SECONDS, MAX_PLUSES, siteOf, normalizeQuery, cacheKey, r2Key } from "../src/_utils/keys.js";
 import { parseFreeSource } from "../src/_utils/free.js";
 import { parseAiSource } from "../src/_utils/ai.js";
 
@@ -46,9 +46,9 @@ async function parse(host, path) {
   const site = siteOf(host), m = path.match(/^\/([^/.]+)$/), query = m && normalizeQuery(m[1]);
   if (!query || query.length > 200) return null;
   const name = query.replaceAll(" ", "+");
-  if (BAD_NAME.test(query) || Buffer.byteLength(name) > 200) return null;
+  if (BAD_NAME.test(query) || Buffer.byteLength(name) > 200 || name.split("+").length > MAX_PLUSES + 1) return null;
   const src = site === "free" ? parseFreeSource(new URLSearchParams()) : site === "ai" ? parseAiSource(new URLSearchParams()) : null;
-  return { id: `${folder(site)}/1/${name}`, r2: await r2Key(site, cacheKey(site, src, 1, query)) };
+  return { id: `${host}/1/${name}`, r2: await r2Key(site, cacheKey(site, src, 1, query)) };
 }
 
 // Views per image over the last DAYS: one query per host and day, since a query returns at most 10,000 rows. Only 200s
@@ -150,8 +150,8 @@ for (let k = 0; k < ranked.length; k += 4) {
   if (got.some(g => !g.cached)) await sleep(1200 - (Date.now() - started));
 }
 
-// public/<folder>/ holds only this run's images, hard-linked from the cache so they aren't stored twice
-for (const f of ["web", "free", "ai"]) await rm(`${OUT}/${f}`, { recursive: true, force: true });
+// public/<hostname>/ holds only this run's images, hard-linked from the cache so they aren't stored twice
+for (const h of HOSTS) await rm(`${OUT}/${h}`, { recursive: true, force: true });
 for (const id of Object.keys(chosen)) {
   await mkdir(dirname(`${OUT}/${id}`), { recursive: true });
   await link(`${CACHE}/files/${id}`, `${OUT}/${id}`);
