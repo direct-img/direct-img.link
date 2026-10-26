@@ -9,7 +9,7 @@
   "r2_buckets": [{ "binding": "R2_IMAGES", "bucket_name": "direct-img-store" }],
   "kv_namespaces": [{ "binding": "DIRECT_IMG_CACHE", "id": "3d7301ab34db464cb568f31cbea7ce8c" }],
   "vars": { "GOATCOUNTER_URL": "https://direct-img.goatcounter.com" },
-  // Routes rather than custom domains, so the old Pages project stays behind them as the origin to roll back to
+  // Each hostname has a proxied placeholder DNS record (AAAA 100::), since the worker answers everything itself
   "routes": [
     { "pattern": "direct-img.link/*", "zone_name": "direct-img.link" },
     { "pattern": "free.direct-img.link/*", "zone_name": "direct-img.link" },

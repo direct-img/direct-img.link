@@ -1,6 +1,6 @@
 // Sends the deploy's outcome to ntfy: what got promoted, how close the account is to the free plan's limits, and what
 // to do when something needs attention. Runs last in .github/workflows/deploy.yml, even when an earlier step failed.
-import { readFile } from "node:fs/promises";
+import { readFile, appendFile } from "node:fs/promises";
 
 const env = process.env;
 const r = JSON.parse(await readFile("promoted/report.json", "utf8").catch(() => "{}"));
@@ -30,15 +30,23 @@ if (r.workers) {
   if (total >= 8e4) actions.push(`Worker requests hit ${pct(total, 1e5)} of the free 100,000/day; past it, images that aren't static files break until 00:00 UTC. Lower \`MIN_VIEWS\` to promote more, or move to Workers Paid ($5/mo).`);
 }
 if (r.workersError) lines.push(`**Worker requests:** couldn't read (${esc(r.workersError)})`);
-// web/1/orange+cat → orange cat, free/2/orange+cat → orange cat i=2 (free)
-const label = id => esc(id.replace(/^(\w+)\/(\d+)\/(.*)$/, (_, f, i, q) => `${q.replaceAll("+", " ")}${i > 1 ? ` i=${i}` : ""}${f !== "web" ? ` (${f})` : ""}`));
+
+// The top images, with thumbnails, go on the run's summary page, which the message links to. free/2/orange+cat →
+// https://free.direct-img.link/orange+cat?i=2 (a static file, so viewing the page doesn't cost Worker requests).
+if (r.top?.length && env.GITHUB_STEP_SUMMARY) {
+  const zone = env.ZONE || "direct-img.link";
+  const rows = r.top.map(({ id, views }) => {
+    const [f, i, name] = id.split("/"), url = `https://${f === "web" ? "" : `${f}.`}${zone}/${name}${i > 1 ? `?i=${i}` : ""}`;
+    return `| <img src="${url}" height="64"> | [${esc(name.replaceAll("+", " "))}](${url}) | ${f === "web" ? "main" : f} | ${i} | ${fmt(views)} |`;
+  });
+  await appendFile(env.GITHUB_STEP_SUMMARY, `## Top static images (views in the last ${r.days} days)\n\n| | Query | Site | i | Views |\n|---|---|---|---|---|\n${rows.join("\n")}\n`);
+}
 
 const failed = env.STATUS !== "success";
 const body = [
   lines.join("  \n"),
-  r.top?.length && `**Top images**\n${r.top.map((t, n) => `${n + 1}. ${label(t.id)} — ${fmt(t.views)}`).join("\n")}`,
+  r.top?.length && env.RUN_URL && `[See top images](${env.RUN_URL})`,
   actions.length && `**⚠ Needs attention**\n${actions.map(a => `- ${a}`).join("\n")}`,
-  env.RUN_URL && `[Open the run](${env.RUN_URL})`,
 ].filter(Boolean).join("\n\n") || "No report was written.";
 console.log(body);
 if (!env.NTFY_URL) process.exit(0);
@@ -50,7 +58,7 @@ const res = await fetch(env.NTFY_URL.startsWith("http") ? env.NTFY_URL : `https:
     Priority: failed ? "5" : actions.length ? "4" : "2",
     Tags: failed ? "rotating_light,x" : actions.length ? "warning" : "white_check_mark",
     Markdown: "yes",
-    ...(env.RUN_URL && { Click: env.RUN_URL }),
+    ...(env.RUN_URL && { Actions: `view, Open run, ${env.RUN_URL}` }),
     ...(env.NTFY_TOKEN && { Authorization: `Bearer ${env.NTFY_TOKEN}` }),
   },
 });

@@ -268,7 +268,7 @@ Fork this repo and add these **GitHub Actions secrets** (Settings → Secrets an
 
 ### 9. Domains and Rules
 
-Change the three `routes` in `wrangler.jsonc` to your domain, `free.<your-domain>` and `ai.<your-domain>` (each needs a proxied DNS record). Any hostname starting with `free.` serves free images, and any starting with `ai.` serves AI images; everything else serves regular search.
+Change the three `routes` in `wrangler.jsonc` to your domain, `free.<your-domain>` and `ai.<your-domain>` (each needs a proxied DNS record; with nothing behind it, use `AAAA 100::`). Any hostname starting with `free.` serves free images, and any starting with `ai.` serves AI images; everything else serves regular search.
 
 Then add the rules that let static images work (needs a token with Zone: Transform Rules Edit and Single Redirect Edit):
 

@@ -167,7 +167,7 @@ Object.assign(report, {
   ok: true, promoted: ids.length, bytes,
   added: ids.filter(id => !prev[id]).length, removed: Object.keys(prev).filter(id => !chosen[id]).length,
   promotedViews: ids.reduce((a, id) => a + chosen[id].views, 0),
-  top: ids.slice(0, 5).map(id => ({ id, views: chosen[id].views })),
+  top: ids.slice(0, 50).map(id => ({ id, views: chosen[id].views })),
 });
 await writeFile(`${CACHE}/report.json`, JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
