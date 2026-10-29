@@ -107,6 +107,7 @@ Need images you can publish? `free.direct-img.link` only serves images marked **
 - Both are optional and can be used alone or together, in any order (`?i=2&src=wikimedia` = `?src=wikimedia&i=2`)
 - `i` above `20` serves `max-i.webp`, which lists each site's range. Other invalid values serve `bad.webp`
 - Only free images are served: if there's no image (or fewer than `i` working ones), `bad.webp` is served (remembered for 24h) instead of an AI image. With a `src`, only that source's images are searched
+- If a source fails or doesn't answer within 10s (e.g. Openverse is down or rate limited), the other source's results are used. If none of them finds anything, `bad.webp` is served but not cached, so the next request searches again
 - Each `src` + `i` + query combination is cached separately. Like the main site, other `i` values within an hour of a search reuse its results and don't count as searches
 - Search engines may crawl `free.` (its robots.txt allows everything), so free images embedded in your pages can show up in image search and link previews. The main site and `ai.` allow only the homepage
 
@@ -293,7 +294,7 @@ Every request looks up its key here first, and a cached image is served from tha
 | `FREE:<src or auto>:<i>:<query>` (e.g. `FREE:wikimedia:2:orange cat`) | free images |
 | `AI:<src>:<i>:<query>` (e.g. `AI:auroraimg-6m:2:frog wizard`) | AI images |
 
-An AI image served for an `?i=` past a search's working images is stored under the search's own key, like any other image. A search that finds nothing, one whose AI image fails too, or a `free.` search with too few images (which gets no AI image) stores an empty object with `err` custom metadata instead, which serves `bad.webp` for 24h. After that the query is searched again.
+An AI image served for an `?i=` past a search's working images is stored under the search's own key, like any other image. A search that finds nothing (not one where a free source failed, which stores nothing), one whose AI image fails too, or a `free.` search with too few images (which gets no AI image) stores an empty object with `err` custom metadata instead, which serves `bad.webp` for 24h. After that the query is searched again.
 
 Add an object lifecycle rule in **R2 → direct-img-store → Settings** that applies to all prefixes and deletes uploaded objects after **90 days**. It's required: nothing else expires cached images.
 

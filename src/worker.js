@@ -222,11 +222,12 @@ COMMIT TRANSACTION;`;
 
     // The query's cached results, or a fresh search. pos holds the indexes of the working images found so far and next
     // the first URL not tried yet, so a known ?i= downloads only its own image and a new one carries on from next.
-    let { urls, pos, next } = list || { urls: await (free ? freeImageUrls(query, src, env) : webImageUrls(query, env, note, firecrawl)), pos: [], next: 0 };
-    // Brave and Firecrawl both failed: ask for donations instead, and cache nothing since it's temporary
+    let { urls, pos, next } = list || { urls: await (free ? freeImageUrls(query, src, env, note) : webImageUrls(query, env, note, firecrawl)), pos: [], next: 0 };
+    // Brave and Firecrawl both failed: ask for donations instead, and cache nothing since it's temporary. On free., a
+    // source failed and none found anything, so bad.webp is served, also uncached.
     if (!urls) {
       release();
-      return asset("donate.webp");
+      return asset(free ? "bad.webp" : "donate.webp");
     }
     // Starting at a known image skips the ones before it, so it can't add to pos
     const known = pos.length >= i;

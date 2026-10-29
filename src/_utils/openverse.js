@@ -19,9 +19,10 @@ async function getToken(env) {
   return access_token;
 }
 
-export async function openverseImageSearch(query, env, ua) {
+// { urls } ([] if none found), or { error } if Openverse refused, failed or timed out, so an outage isn't cached as no results
+export async function openverseImageSearch(query, env, ua, signal) {
   const url = `${API}/images/?${new URLSearchParams({ q: query, license: "cc0,pdm", extension: "jpg,png,gif,webp", page_size: 20 })}`;
-  const search = token => fetch(url, { headers: { "User-Agent": ua, ...(token && { Authorization: `Bearer ${token}` }) } });
+  const search = token => fetch(url, { signal, headers: { "User-Agent": ua, ...(token && { Authorization: `Bearer ${token}` }) } });
   try {
     const token = await getToken(env).catch(() => null);
     let res = await search(token);
@@ -29,10 +30,10 @@ export async function openverseImageSearch(query, env, ua) {
       await env.DIRECT_IMG_CACHE.delete(TOKEN_KEY);
       res = await search();
     }
-    if (!res.ok) return null;
+    if (!res.ok) return { error: `HTTP ${res.status}: ${(await res.text()).slice(0, 300)}` };
     const data = await res.json();
-    return data.results?.map(r => r.url).filter(Boolean) || null;
-  } catch {
-    return null;
+    return { urls: data.results?.map(r => r.url).filter(Boolean) || [] };
+  } catch (err) {
+    return { error: err.message };
   }
 }
