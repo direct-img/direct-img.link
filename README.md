@@ -107,7 +107,7 @@ Need images you can publish? `free.direct-img.link` only serves images marked **
 - Both are optional and can be used alone or together, in any order (`?i=2&src=wikimedia` = `?src=wikimedia&i=2`)
 - `i` above `20` serves `max-i.webp`, which lists each site's range. Other invalid values serve `bad.webp`
 - Only free images are served: if there's no image (or fewer than `i` working ones), `bad.webp` is served (remembered for 24h) instead of an AI image. With a `src`, only that source's images are searched
-- If a source fails or doesn't answer within 10s (e.g. Openverse is down or rate limited), the other source's results are used. If none of them finds anything, `bad.webp` is served but not cached, so the next request searches again
+- If a source fails or doesn't answer within 16s (e.g. Openverse is down or rate limited), the other source's results are used. If none of them finds anything, `bad.webp` is served but not cached, so the next request searches again
 - Each `src` + `i` + query combination is cached separately. Like the main site, other `i` values within an hour of a search reuse its results and don't count as searches
 - Search engines may crawl `free.` (its robots.txt allows everything), so free images embedded in your pages can show up in image search and link previews. The main site and `ai.` allow only the homepage
 

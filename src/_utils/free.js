@@ -14,8 +14,9 @@ export function parseFreeSource(searchParams) {
 }
 
 // Each source's search gives up after this, so a hung one (e.g. Openverse timing out with 504s) can't hold the query's
-// lock while the other's results wait. Well under the worker's LOCK_SECONDS minus its 20s image deadline.
-const SEARCH_MS = 10000;
+// lock while the other's results wait. Under the worker's LOCK_SECONDS minus its 20s image deadline. 16s since Openverse's
+// working searches took 8-15s in Nov 2026 (WordPress/openverse#5649).
+const SEARCH_MS = 16000;
 
 // Every source's image URLs, one source after another. All are searched at once, since the whole list gets cached.
 // null if a source failed and none found anything, so an outage is retried on the next request instead of being cached
