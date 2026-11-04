@@ -2,5 +2,5 @@
 // Safe to edit by hand. Imported by the worker and by the homepage (as a static file, so no Functions quota).
 // The burst limit (~20 req/10s) is a Cloudflare WAF rule, not set here.
 export const DAILY_LIMIT = 15;
-export const FREE_DAILY_LIMIT = 20;
+export const FREE_DAILY_LIMIT = 50;
 export const AI_DAILY_LIMIT = 50;
