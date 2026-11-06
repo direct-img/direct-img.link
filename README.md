@@ -122,9 +122,13 @@ Licenses come from each source's metadata and can be wrong. Check the original b
 
 `ai.direct-img.link` generates an image of anything instead of searching, so it never comes up empty. Same URL format:
 
+<img src="https://ai.direct-img.link/sun+at+night?i=1" alt="sun at night" width="200"> <img src="https://ai.direct-img.link/sun+at+night?i=4" alt="sun at night" width="200"> <img src="https://ai.direct-img.link/lighthouse+at+night" alt="lighthouse at night" width="200"> <img src="https://ai.direct-img.link/frog+wizard?i=6" alt="frog wizard" width="200">
+
 ```markdown
-![frog wizard](https://ai.direct-img.link/frog+wizard)
-![frog wizard](https://ai.direct-img.link/frog+wizard?i=2)
+![sun at night](https://ai.direct-img.link/sun+at+night?i=1)
+![sun at night](https://ai.direct-img.link/sun+at+night?i=4)
+![lighthouse at night](https://ai.direct-img.link/lighthouse+at+night)
+![frog wizard](https://ai.direct-img.link/frog+wizard?i=6)
 ```
 
 | Param | Values | Default |
