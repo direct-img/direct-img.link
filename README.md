@@ -82,7 +82,7 @@ Literal slashes (`/`) and dots (`.`) in the URL path are **rejected** to prevent
 
 ### Things to know
 
-- **Query parameters (`?...`)** other than `i` (and `src` on [free.](#free-images) and [ai.direct-img.link](#ai-images)) serve `bad.webp` — `/orange+cat?size=large` ❌
+- **Query parameters (`?...`)** other than `i` (and `src` on [free.](#free-images)) serve `bad.webp` — `/orange+cat?size=large` ❌
 - **Fragments (`#...`)** are never sent to the server by browsers
 - **Double-encoded values** are decoded once — `%2520` becomes `%20` (literal), not a space
 - Two queries that normalize to the same string share the same cached image
@@ -120,22 +120,20 @@ Licenses come from each source's metadata and can be wrong. Check the original b
 
 ## AI Images
 
-`ai.direct-img.link` generates an image of anything instead of searching, so it never comes up empty. Same URL format, plus an optional `src`:
+`ai.direct-img.link` generates an image of anything instead of searching, so it never comes up empty. Same URL format:
 
 ```markdown
 ![frog wizard](https://ai.direct-img.link/frog+wizard)
 ![frog wizard](https://ai.direct-img.link/frog+wizard?i=2)
-![frog wizard](https://ai.direct-img.link/frog+wizard?src=auroraimg-6m&i=2)
 ```
 
 | Param | Values | Default |
 |---|---|---|
-| `src` | `auroraimg-6m` (case-insensitive) | `auroraimg-6m` |
 | `i` | `1`–`1000` — each is a different image of the same query | `1` |
 
-- The same query, `src` and `i` always give the same image
-- `i` above `1000` serves `max-i.webp`, which lists each site's range. Other invalid values serve `bad.webp`
-- Images come from [AuroraIMG-6M](https://github.com/direct-img/AuroraIMG-6M), a tiny 6.8M-parameter model running on our own server. They're 512px, soft and painterly: the right colors, setting and mood, but often not the exact object, and faces come out distorted
+- The same query and `i` always give the same image
+- `i` above `1000` serves `max-i.webp`, which lists each site's range. Other invalid values and any other param (including `src`) serve `bad.webp`
+- Images come from [AuroraIMG2-50M](https://github.com/direct-img/AuroraIMG2-50M), a small 50M-parameter model running on our own server. A new one takes about 6 seconds. They're 256px upscaled to 512px: usually the right subject, but prompts with several objects, counts or actions often come out wrong, and faces, hands and text are weak
 - The same model makes the fallback images for an `?i=` past a search's working images
 
 ## For AI System Prompts
@@ -247,7 +245,7 @@ Set in `wrangler.jsonc` (put your KV namespace's ID there):
 | `NTFY_TOKEN` | ntfy token that can write to the `NTFY_URL` topic, if the topic is protected | Optional |
 | `GOATCOUNTER_URL` | GoatCounter site URL for image hit analytics (e.g. `https://direct-img.goatcounter.com`) | Optional |
 | `GOATCOUNTER_TOKEN` | GoatCounter API token with "Record pageviews" permission | Optional |
-| `AURORA_API_KEY` | Key for the [AuroraIMG-6M API](https://github.com/direct-img/AuroraIMG-6M) (AI images, and the fallback for an `?i=` past a search's working images). Without it, `ai.` and those `?i=` serve `bad.webp` | Optional |
+| `AURORA_API_KEY` | Key for the [AuroraIMG2-50M API](https://github.com/direct-img/AuroraIMG2-50M) (AI images, and the fallback for an `?i=` past a search's working images). Without it, `ai.` and those `?i=` serve `bad.webp` | Optional |
 
 ### 7. WAF Rules
 
@@ -292,7 +290,7 @@ Every request looks up its key here first, and a cached image is served from tha
 | normalized query (lowercase, trimmed, max 200 chars) | main site, `i` = 1 |
 | `WEB:<i>:<query>` (e.g. `WEB:2:orange cat`) | main site, `i` > 1 |
 | `FREE:<src or auto>:<i>:<query>` (e.g. `FREE:wikimedia:2:orange cat`) | free images |
-| `AI:<src>:<i>:<query>` (e.g. `AI:auroraimg-6m:2:frog wizard`) | AI images |
+| `AI:<model>:<i>:<query>` (e.g. `AI:auroraimg2-50m:2:frog wizard`) | AI images. The model (`AI_MODEL` in `src/_utils/ai.js`) is part of the key, so a new one gets fresh images |
 
 An AI image served for an `?i=` past a search's working images is stored under the search's own key, like any other image. A search that finds nothing (not one where a free source failed, which stores nothing), one whose AI image fails too, or a `free.` search with too few images (which gets no AI image) stores an empty object with `err` custom metadata instead, which serves `bad.webp` for 24h. After that the query is searched again.
 
@@ -305,7 +303,7 @@ Every request runs the Worker, which counts toward the free plan's 100,000 reque
 - Views come from the last 7 days of Cloudflare's zone analytics, which count static files too, so a promoted image that stops being viewed drops out. Analytics has no query string, so each query's views are split across its `?i=` and `?src=` by a WAF custom rule (`scripts/rules.js`) that logs every image request with its query string. The job reads up to 1,000 logged requests per hour, enough to estimate the split on a busy day. These show up as **Skip** events in **Security → Events**
 - The top 19,900 with at least `MIN_VIEWS` (20) are promoted, up to `MAX_BYTES` (4 GB) in total. The free plan allows 20,000 static files per deploy
 - Only JPEG, PNG, GIF and WebP are promoted, and only queries of up to 8 words (see below). Static files get their type from their extension, which these have none of, so `public/_headers` declares them all `image/jpeg`, and browsers detect these four formats from the bytes anyway
-- Images are cached between runs (Actions cache), so only newly promoted ones download from R2
+- Images are cached between runs (Actions cache), so only newly promoted ones download from R2, and ones whose R2 key changed (e.g. a new `ai.` model)
 - An image is dropped once it's 90 days old, the same as the R2 lifecycle rule, so a popular query (e.g. `current us president`) is still searched again instead of staying static forever. It's promoted again the next day if it's still popular
 
 Static files ignore query strings and are shared by all three hostnames, so URL Rewrite Rules (`scripts/rules.js`) turn each image request into its static file's path first: under its hostname, named after its `?i=` and `?src=`. The visitor's URL doesn't change:
@@ -352,7 +350,7 @@ After deploying, visit `https://<your-domain>/_setup` once. It creates the `dire
 - **Cloudflare WAF** — layer 7 mitigation
 - **Brave Image Search API + Firecrawl Search API** — image sourcing, each the other's fallback
 - **Openverse API + Wikimedia Commons API** — free image sourcing
-- **[AuroraIMG-6M](https://github.com/direct-img/AuroraIMG-6M) on Dokploy** — AI images and the fallback for an `?i=` past a search's working images
+- **[AuroraIMG2-50M](https://github.com/direct-img/AuroraIMG2-50M) on Dokploy** — AI images and the fallback for an `?i=` past a search's working images
 
 ---
 

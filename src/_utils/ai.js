@@ -1,17 +1,11 @@
-// AI images for ai.direct-img.link, and the fallback for an ?i= past a search's working images
-const SOURCES = { "auroraimg-6m": auroraImage };
-export const DEFAULT_AI_SOURCE = "auroraimg-6m";
-
-// ?src= on ai.*, case-insensitive. Returns null if invalid.
-export function parseAiSource(searchParams) {
-  const src = searchParams.get("src")?.toLowerCase() || DEFAULT_AI_SOURCE;
-  return Object.hasOwn(SOURCES, src) ? src : null;
-}
+// AI images for ai.direct-img.link, and the fallback for an ?i= past a search's working images.
+// The model is part of the cache key (AI:<model>:<i>:<query>), so a new model gets fresh images instead of the old one's.
+export const AI_MODEL = "auroraimg2-50m";
 
 // Same result shape as fetchImage: { success, buffer, contentType } or { success: false, reason }
-export async function aiImage(src, query, i, env) {
+export async function aiImage(query, i, env) {
   try {
-    return await SOURCES[src](query, seedFor(query, i), env);
+    return await auroraImage(query, seedFor(query, i), env);
   } catch (err) {
     return { success: false, reason: err.name === "TimeoutError" ? "Timeout" : err.message };
   }
@@ -25,12 +19,13 @@ function seedFor(query, i) {
   return h >>> 0;
 }
 
-// AuroraIMG-6M on our Dokploy server: https://github.com/direct-img/AuroraIMG-6M
+// AuroraIMG2-50M on our Dokploy server: https://github.com/direct-img/AuroraIMG2-50M
+// An image takes ~6s and up to 3 more requests queue behind it (503 past that), so the last in line waits ~25s
 async function auroraImage(query, seed, env) {
   if (!env.AURORA_API_KEY) return { success: false, reason: "AURORA_API_KEY not set" };
-  const res = await fetch(`https://aurora.direct-img.link/generate?${new URLSearchParams({ prompt: query, seed })}`, {
+  const res = await fetch(`https://aurora2.direct-img.link/generate?${new URLSearchParams({ prompt: query, seed })}`, {
     headers: { Authorization: `Bearer ${env.AURORA_API_KEY}` },
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) return { success: false, reason: `HTTP ${res.status}` };
   return { success: true, buffer: await res.arrayBuffer(), contentType: res.headers.get("content-type") };

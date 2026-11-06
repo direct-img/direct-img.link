@@ -7,7 +7,7 @@ import { mkdir, readFile, writeFile, link, rm, readdir } from "node:fs/promises"
 import { dirname } from "node:path";
 import { TTL_SECONDS, MAX_INDEX, MAX_PLUSES, parseIndex, siteOf, normalizeQuery, cacheKey, r2Key } from "../src/_utils/keys.js";
 import { parseFreeSource } from "../src/_utils/free.js";
-import { parseAiSource } from "../src/_utils/ai.js";
+import { AI_MODEL } from "../src/_utils/ai.js";
 
 const env = process.env;
 const ZONE = env.ZONE || "direct-img.link", BUCKET = "direct-img-store";
@@ -42,14 +42,14 @@ async function gql(query) {
   return r.data.viewer;
 }
 
-// The image a request was for, from its path (/orange+cat) and query string (?i=2&src=wikimedia), checked like the
-// worker checks them. Its id is its static file's path, which the rules build the same way
+// The image a request was for, from its path (/orange+cat) and query string (?i=2&src=wikimedia, src on free. only),
+// checked like the worker checks them. Its id is its static file's path, which the rules build the same way
 // (free.direct-img.link/orange+cat/i2-wikimedia). null for anything else (the homepage, assets, probes like
 // /wp-admin/x.php, params the worker rejects).
 async function image(host, path, qs) {
   const site = siteOf(host), m = path.match(/^\/([^/.]+)$/), query = m && normalizeQuery(m[1]), p = new URLSearchParams(qs);
-  if (!query || query.length > 200 || [...p.keys()].some(k => k !== "i" && !(site && k === "src"))) return null;
-  const i = parseIndex(p), src = site === "free" ? parseFreeSource(p) : site === "ai" ? parseAiSource(p) : null;
+  if (!query || query.length > 200 || [...p.keys()].some(k => k !== "i" && !(site === "free" && k === "src"))) return null;
+  const i = parseIndex(p), src = site === "free" ? parseFreeSource(p) : site === "ai" ? AI_MODEL : null;
   if (!i || i > MAX_INDEX[site] || (site && !src)) return null;
   const name = query.replaceAll(" ", "+"), file = `i${p.get("i") ?? ""}-${p.get("src") ?? ""}`;
   if (BAD_NAME.test(query) || /[^\w-]/.test(file) || Buffer.byteLength(name) > 200 || name.split("+").length > MAX_PLUSES + 1) return null;
@@ -103,10 +103,12 @@ async function workerRequests(day) {
 
 // The image from the last run's cache, or from R2. Skips a failed search's empty marker, formats browsers can't detect,
 // and images past TTL_SECONDS, so a popular query gets searched again like any other instead of staying static forever.
+// A cached image whose R2 key changed (e.g. ai.'s model, which is part of its key) is fetched again, so the old one
+// stops being served.
 const expired = uploaded => Date.now() - uploaded >= TTL_SECONDS * 1000;
 async function fetchImage(img, prev) {
   const file = `${CACHE}/files/${img.id}`, p = prev[img.id];
-  if (p?.uploaded && await readFile(file).then(() => true, () => false)) return expired(p.uploaded) ? { skip: "expired" } : { ...p, cached: true };
+  if (p?.uploaded && p.r2 === img.r2 && await readFile(file).then(() => true, () => false)) return expired(p.uploaded) ? { skip: "expired" } : { ...p, cached: true };
   const res = await api(`/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/r2/buckets/${BUCKET}/objects/${img.r2}`);
   if (res.status === 404) return { skip: "missing" };
   if (!res.ok) return { skip: "failed", error: `${img.id}: HTTP ${res.status}` };

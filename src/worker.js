@@ -2,7 +2,7 @@ import { braveImageSearch } from "./_utils/brave.js";
 import { firecrawlImageSearch, FIRECRAWL_RESULTS } from "./_utils/firecrawl.js";
 import { freeImageUrls, parseFreeSource, FREE_UA } from "./_utils/free.js";
 import { isFlickrPlaceholder } from "./_utils/flickr.js";
-import { aiImage, parseAiSource, DEFAULT_AI_SOURCE } from "./_utils/ai.js";
+import { aiImage, AI_MODEL } from "./_utils/ai.js";
 import { surreal } from "./_utils/surreal.js";
 import { TTL_SECONDS, MAX_INDEX, parseIndex, siteOf, normalizeQuery, cacheKey as keyFor, r2Key as r2KeyFor, sha256 } from "./_utils/keys.js";
 import * as LIMITS from "../public/assets/rate-limit.js";
@@ -49,14 +49,14 @@ async function handle(request, env, context) {
   if (!query) return jsonResponse(400, { error: "Empty query" });
   if (query.length > 200) return jsonResponse(400, { error: "Query too long (max 200 characters)" });
 
-  // ?i= picks which result to serve. free.direct-img.link serves only unrestricted images and ai.direct-img.link only
-  // AI-generated ones; both also take ?src=. Any other param (e.g. scanner probes like ?path=../../.env) is rejected
+  // ?i= picks which result to serve. free.direct-img.link serves only unrestricted images (and also takes ?src=) and
+  // ai.direct-img.link only AI-generated ones. Any other param (e.g. scanner probes like ?path=../../.env) is rejected
   // before it can cost a search.
   const free = site === "free", ai = site === "ai";
   const label = { free: "Free ", ai: "AI " }[site] || "";
   const i = parseIndex(url.searchParams);
-  const src = free ? parseFreeSource(url.searchParams) : ai ? parseAiSource(url.searchParams) : null;
-  const extra = [...url.searchParams.keys()].some(k => k !== "i" && !(site && k === "src"));
+  const src = free ? parseFreeSource(url.searchParams) : ai ? AI_MODEL : null;
+  const extra = [...url.searchParams.keys()].some(k => k !== "i" && !(free && k === "src"));
   if (!i || (site && !src) || extra) return asset("bad.webp");
   if (i > MAX_INDEX[site]) return asset("max-i.webp");
 
@@ -196,7 +196,7 @@ COMMIT TRANSACTION;`;
   // ERR_SECONDS) is left for when that fails too, when the search found nothing at all, or for free.*, which serves free
   // images only.
   const fail = async (t, m, tag, p, aiFallback = !free) => {
-    const fallback = aiFallback && await aiImage(DEFAULT_AI_SOURCE, query, i, env);
+    const fallback = aiFallback && await aiImage(query, i, env);
     note({ title: fallback.success ? `${t}, Served AI Image` : t, message: fallback && !fallback.success ? `${m}\nAI fallback failed: ${fallback.reason}` : m, tags: tag, priority: p });
     if (fallback.success) return await store(fallback);
     await env.R2_IMAGES.put(r2Key, "", { customMetadata: { err: "1" } });
@@ -209,7 +209,7 @@ COMMIT TRANSACTION;`;
   // out LOCK_SECONDS only to find nothing stored and get bad.webp.
   const job = (async () => {
     if (ai) {
-      const res = await aiImage(src, query, i, env);
+      const res = await aiImage(query, i, env);
       if (res.success) return await store(res);
       // Not cached, since it's likely temporary (busy or down), so the next request tries again
       note({ title: "AI Image Failed", message: `${src} failed for: ${cacheKey}\nReason: ${res.reason}`, tags: "boom,x", priority: 4 });
