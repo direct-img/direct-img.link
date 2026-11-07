@@ -34,6 +34,8 @@ jobs:
         with:
           node-version: 24
 
+      - uses: oven-sh/setup-bun@v2
+
       # Last run's promoted images, so only newly promoted ones download from R2
       - uses: actions/cache/restore@v6
         with:
@@ -45,7 +47,7 @@ jobs:
         run: node scripts/promote.js
 
       - id: deploy
-        run: npx -y wrangler@4 deploy
+        run: bunx wrangler@4 deploy
 
       - if: steps.promote.outcome == 'success'
         uses: actions/cache/save@v6
