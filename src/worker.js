@@ -277,7 +277,7 @@ COMMIT TRANSACTION;`;
       : `UPSERT results:\`${listHash}\` SET urls = ${JSON.stringify(urls)}, pos = ${JSON.stringify(pos)}, next = ${next}, exp = time::now() + ${LIST_SECONDS}s;`
     ).catch(() => {}));
 
-    if (!urls.length) return await fail("Search Failed", `${free ? "No free results" : "Brave and Firecrawl found nothing"} for: ${cacheKey}`, "question", 3, false);
+    if (!urls.length) return await fail("Search Failed", `${free ? "No free results" : "Brave and Firecrawl found nothing"} for: ${cacheKey}`, "question", 2, false);
     if (!imgResult) {
       const reasonStr = reachable ? failReasons.slice(0, 6).join(", ") + (failReasons.length > 6 ? ", ..." : "") : `only ${urls.length} results`;
       return await fail("Fetch Error (502)", `Found ${found} of ${i} working images for: ${cacheKey}\nReasons: ${reasonStr}`, "boom,x", 4);
