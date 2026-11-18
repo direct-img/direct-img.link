@@ -11,6 +11,8 @@ import * as LIMITS from "../public/assets/rate-limit.js";
 const ERR_SECONDS = 24 * 60 * 60;
 // How long a search may hold its query's lock; longer than the 20s image deadline plus the search itself
 const LOCK_SECONDS = 45;
+// How many times the rate limit transaction runs before giving up on a write conflict
+const TRIES = 6;
 // How long a search's results are kept for the query's other ?i=, which then don't search again or count toward limits
 const LIST_SECONDS = 60 * 60;
 // Image candidates downloaded at once, so one slow or dead host doesn't stall the rest for its full 5s timeout
@@ -102,7 +104,7 @@ RETURN { count: $c, wait: $w, list: $l };
 COMMIT TRANSACTION;`;
 
     try {
-      for (let attempt = 1; attempt <= 3; attempt++) {
+      for (let attempt = 1; attempt <= TRIES; attempt++) {
         const dbRes = await db(sql);
         const rawText = await dbRes.text();
 
@@ -116,13 +118,20 @@ COMMIT TRANSACTION;`;
           break;
         }
         try {
-          const data = JSON.parse(rawText);
-          if (data.every(s => s.status === "OK") && data.at(-1)?.result) {
-            ({ count, wait, list } = data.at(-1).result);
+          // SurrealDB 2 answers a transaction with its RETURN alone, 3 and up with one result per statement (BEGIN and
+          // COMMIT included), so the RETURN is found by its shape instead of its position.
+          const data = JSON.parse(rawText), out = data.findLast(s => s.result?.wait !== undefined)?.result;
+          if (data.every(s => s.status === "OK") && out) {
+            ({ count, wait, list } = out);
             locked = !wait && (!!list || count <= limit);
             break;
           }
-          if (attempt < 3 && /conflict/i.test(rawText)) continue;
+          // Misses that arrive together from one IP all write its counter, and only some of those commits get through
+          // (fewer on SurrealDB 4 than on 2). Each loser waits a random, growing moment so retries don't collide again.
+          if (attempt < TRIES && /conflict/i.test(rawText)) {
+            await new Promise(r => setTimeout(r, Math.random() * 40 * attempt));
+            continue;
+          }
           note({
             title: "SurrealDB Unexpected Result",
             message: `Response: ${rawText.slice(0, 500)}`,

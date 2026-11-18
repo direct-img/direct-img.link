@@ -339,7 +339,7 @@ The same transaction also claims a per-query lock (`lock:<sha256-of-cache-key>`,
 
 Each search also saves its result URLs as `results:<sha256 of site, src and query>` for 1 hour, with the indexes of the images that worked so far (`pos`) and the first URL not yet tried (`next`). The transaction returns that record when it exists, and then doesn't count the request. A `?i=` already in `pos` downloads only its own image, and a new one carries on from `next`, extending the record. Expired records are deleted by the same occasional cleanup as old rate counters.
 
-**Note:** This implementation is tested and verified for **SurrealDB v2.6.5**.
+**Note:** This implementation is tested and verified for **SurrealDB v2.6.5 and v4.0.1**.
 
 After deploying, visit `https://<your-domain>/_setup` once. It creates the `direct_img` namespace, `rate_limit` database, `rate` table, an `updated_at` index (used by the cleanup query), the `lock` table and the `results` table. It's idempotent, so visiting again is harmless, and it returns `{"ok":true}` on success.
 
@@ -350,7 +350,7 @@ After deploying, visit `https://<your-domain>/_setup` once. It creates the `dire
 - **Cloudflare Workers** — hosting, with popular images as static assets
 - **Cloudflare R2** — image storage
 - **Cloudflare KV** — API access tokens
-- **SurrealDB (v2.6.5)** — atomic rate limiting, search locks + cached result lists
+- **SurrealDB (v2.6.5 – v4.0.1)** — atomic rate limiting, search locks + cached result lists
 - **Cloudflare WAF** — layer 7 mitigation
 - **Brave Image Search API + Firecrawl Search API** — image sourcing, each the other's fallback
 - **Openverse API + Wikimedia Commons API** — free image sourcing
