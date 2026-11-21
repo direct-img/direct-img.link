@@ -35,4 +35,4 @@ description: Embed images anywhere with direct-img.link URLs, where https://dire
 - `ai.direct-img.link`: 50 new images per day per IP
 - Each host has its own counter, reset at 00:00 UTC. Only new searches count. Cached URLs keep loading after the limit is hit.
 - A search's results are kept for 1 hour, so other `?i=` values of a query searched in the last hour don't count either. If an image is wrong, try `?i=2`, `?i=3`… right away before rewording the query, since a reworded query is a new search. On `ai.` every new `i` is a new image and counts.
-- Burst: ~15 requests per 10 seconds per IP
+- Burst: ~20 requests per 10 seconds per IP
