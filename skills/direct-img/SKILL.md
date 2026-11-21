@@ -25,14 +25,14 @@ description: Embed images anywhere with direct-img.link URLs, where https://dire
 ## AI images
 
 - `https://ai.direct-img.link/<query>` generates an image instead of searching, so it never comes up empty.
-- Images are 512px, soft and painterly: the right colors, setting and mood, but often not the exact object, and faces come out distorted. Use it as a fallback or for abstract/mood images, not when the exact thing matters.
-- `?i=N` (1–1000) gives a different image of the same query. `?src=auroraimg-6m` is the only (and default) source.
+- Images are 256px upscaled to 512px and take about 6 seconds. Usually the right subject, but several objects, counts or actions often come out wrong, and faces, hands and text are weak. Use it as a fallback or for abstract/mood images, not when the exact thing matters.
+- `?i=N` (1–1000) gives a different image of the same query. Any other param, `src` included, returns the bad image.
 
 ## Rate limit
 
 - `direct-img.link`: 15 new searches per day per IP
-- `free.direct-img.link`: 100 new searches per day per IP
-- `ai.direct-img.link`: 100 new images per day per IP
+- `free.direct-img.link`: 50 new searches per day per IP
+- `ai.direct-img.link`: 50 new images per day per IP
 - Each host has its own counter, reset at 00:00 UTC. Only new searches count. Cached URLs keep loading after the limit is hit.
 - A search's results are kept for 1 hour, so other `?i=` values of a query searched in the last hour don't count either. If an image is wrong, try `?i=2`, `?i=3`… right away before rewording the query, since a reworded query is a new search. On `ai.` every new `i` is a new image and counts.
 - Burst: ~15 requests per 10 seconds per IP
