@@ -3,3 +3,5 @@ node_modules/
 # Filled by scripts/promote.js before each deploy
 promoted/
 public/*direct-img.link/
+# Copied from skills/direct-img/ by the deploy workflow
+public/SKILL.md

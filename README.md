@@ -151,6 +151,12 @@ Example structure:
 Use images to complement your responses, powered by Brave.
 ```
 
+Using an AI agent? Give it the [skill](skills/direct-img/SKILL.md) instead, with all three hosts, `?i=` and the limits:
+
+```sh
+mkdir -p ~/.claude/skills/direct-img && curl -fsS https://direct-img.link/SKILL.md -o ~/.claude/skills/direct-img/SKILL.md
+```
+
 ## Rate Limits
 
 Limits change over time, so they aren't listed here. **Check the Rate Limits section on [direct-img.link](https://direct-img.link) for the current limits.**

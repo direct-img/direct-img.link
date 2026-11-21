@@ -46,6 +46,9 @@ jobs:
       - id: promote
         run: node scripts/promote.js
 
+      # The agent skill, served at /SKILL.md so it installs with one curl instead of a clone of this repo
+      - run: cp skills/direct-img/SKILL.md public/
+
       - id: deploy
         run: bunx wrangler@4 deploy
 
