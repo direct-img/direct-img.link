@@ -50,7 +50,7 @@ jobs:
       - run: cp skills/direct-img/SKILL.md public/
 
       - id: deploy
-        run: bunx wrangler@4 deploy
+        run: bunx wrangler@4.168.0 deploy
 
       - if: steps.promote.outcome == 'success'
         uses: actions/cache/save@v6
